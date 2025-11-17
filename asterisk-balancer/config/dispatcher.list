@@ -1,0 +1,6 @@
+# Dispatcher list for Kamailio
+# Format: setid destination flags priority attributes
+# 80/20 distribution: asterisk-1 gets priority 8, asterisk-2 gets priority 2
+
+1 sip:172.20.0.40:5060 0 8
+1 sip:172.20.0.41:5060 0 2

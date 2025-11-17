@@ -1,0 +1,20 @@
+# Data directories
+*/data/
+postgres-*/data/
+maria-*/data/
+asterisk-*/data/
+
+# Log files
+*/logs/
+nginx/logs/
+
+# SSH keys if generated
+*.pem
+*.pub
+
+# Docker
+.docker/
+
+# OS files
+.DS_Store
+Thumbs.db
