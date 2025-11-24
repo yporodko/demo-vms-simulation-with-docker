@@ -1,280 +1,245 @@
-# Asterisk Setup Guide
+# Asterisk VoIP Setup Guide
 
-## What is Asterisk?
+## Overview
 
-Asterisk is an open-source PBX (Private Branch Exchange) - essentially a phone system that routes calls. It handles VoIP (Voice over IP) calls using protocols like SIP (Session Initiation Protocol).
+This setup provides a VoIP infrastructure with:
+- **asterisk-1** (46.62.200.187) - Primary PBX handling 80% of calls
+- **asterisk-2** (95.216.205.250) - Secondary PBX handling 20% of calls
+- **asterisk-balancer** (37.27.35.37) - Load balancer distributing calls
 
-## How This Setup Works
-
-### Architecture
-
-```
-SIPp (Test Client)
-    ↓ (sends SIP INVITE)
-Kamailio Load Balancer (asterisk-balancer)
-    ↓ 80%          ↓ 20%
-Asterisk-1    Asterisk-2
-```
-
-### Components
-
-1. **Kamailio (asterisk-balancer)**: SIP load balancer that distributes incoming calls
-   - Receives SIP calls on port 5060
-   - Routes 80% to asterisk-1, 20% to asterisk-2
-   - Uses weighted round-robin distribution
-
-2. **Asterisk-1 & Asterisk-2**: VoIP PBX servers
-   - Handle incoming SIP calls
-   - Execute dialplan logic (like a phone system script)
-   - Play audio files (tt-monkeys sound)
-
-3. **SIPp**: SIP testing tool
-   - Simulates phone calls
-   - Can generate load tests
-   - Sends SIP INVITE messages
-
-## Understanding SIP Call Flow
-
-A typical SIP call has these steps:
-
-1. **INVITE** - "I want to make a call"
-2. **100 Trying** - "I received your request"
-3. **180 Ringing** - "The phone is ringing"
-4. **200 OK** - "Call answered"
-5. **ACK** - "Acknowledged"
-6. **RTP Stream** - Actual voice/audio data
-7. **BYE** - "Hanging up"
-8. **200 OK** - "Goodbye confirmed"
-
-## Dialplan Logic (extensions.conf)
-
-The dialplan defines what happens when a call arrives:
+## Architecture
 
 ```
-1. Call arrives → Ring for 10-20 seconds (random)
-2. Generate random number (1-100):
-   - 1-12:  Return BUSY signal (12%)
-   - 13-45: Return NO ANSWER (33%)
-   - 46-100: ANSWER and play tt-monkeys (55%)
-3. If answered, play sound for 15-45 seconds (random)
-4. Hangup
+Incoming SIP Call
+       |
+       v
+asterisk-balancer (37.27.35.37:5060)
+       |
+       +-- 80% --> asterisk-1 (46.62.200.187:5060)
+       |
+       +-- 20% --> asterisk-2 (95.216.205.250:5060)
 ```
 
-## Testing the Setup
+## Call Behavior
 
-### Basic Test (1 call)
+When a call reaches a backend server (asterisk-1 or asterisk-2):
+
+1. **Ring Phase**: Phone rings for 10-20 seconds (random)
+2. **Outcome** (randomly determined):
+   - **12%** - Busy signal
+   - **33%** - No answer (timeout)
+   - **55%** - Answer and play "tt-monkeys" sound for 15-45 seconds
+
+## Deployment
+
+### Deploy to Production
 
 ```bash
-# SSH into SIPp container
-docker exec -it sipp bash
+cd ansible
 
-# Make a single test call
-sipp -sn uac asterisk-balancer:5060 -m 1
+# Deploy all Asterisk servers
+ansible-playbook playbooks/asterisk.yml
+
+# Deploy only backends
+ansible-playbook playbooks/asterisk.yml --tags backends
+
+# Deploy only balancer
+ansible-playbook playbooks/asterisk.yml --tags balancer
 ```
 
-**What this does:**
-- `-sn uac` = Use built-in "User Agent Client" scenario
-- `asterisk-balancer:5060` = Target SIP server
-- `-m 1` = Make 1 call
-
-### Load Test (Multiple calls)
+### Deploy to Docker (Local Testing)
 
 ```bash
-# Make 100 calls at 5 calls per second
-sipp -sn uac asterisk-balancer:5060 -m 100 -r 5
+cd ansible
 
-# Run calls for 60 seconds
-sipp -sn uac asterisk-balancer:5060 -d 60000 -r 2
+# Start Docker containers
+docker-compose up -d asterisk-1-test asterisk-2-test asterisk-balancer-test
+
+# Deploy to Docker
+ansible-playbook -i inventory/hosts-docker-test.yml playbooks/asterisk-docker.yml
 ```
 
-**Parameters:**
-- `-m 100` = Maximum 100 calls
-- `-r 5` = Rate of 5 calls per second
-- `-d 60000` = Duration of 60 seconds (in milliseconds)
+## Verification
 
-### Monitor Call Distribution
+### Check Asterisk Status
 
 ```bash
-# Watch Asterisk-1 calls
-docker exec -it asterisk-1 asterisk -rvvv
-
-# In Asterisk CLI, run:
-core show channels
-
-# Watch Asterisk-2 calls
-docker exec -it asterisk-2 asterisk -rvvv
+# On any Asterisk server
+asterisk -rx 'core show version'
+asterisk -rx 'pjsip show endpoints'
+asterisk -rx 'dialplan show incoming'
 ```
 
-After running 100 calls, you should see:
-- ~80 calls handled by asterisk-1
-- ~20 calls handled by asterisk-2
+### Check Load Balancer
 
-## Common SIPp Scenarios
-
-### 1. Simple Call (UAC - User Agent Client)
 ```bash
-sipp -sn uac asterisk-balancer:5060 -m 10
+# On asterisk-balancer
+asterisk -rx 'pjsip show endpoints'
+asterisk -rx 'dialplan show balancer'
 ```
 
-### 2. Call with Statistics
+### Monitor Active Calls
+
 ```bash
-sipp -sn uac asterisk-balancer:5060 -m 100 -r 5 -trace_stat
+# Show current channels
+asterisk -rx 'core show channels'
+
+# Verbose logging
+asterisk -rvvv
 ```
 
-### 3. Call with Message Details
-```bash
-sipp -sn uac asterisk-balancer:5060 -m 10 -trace_msg
+## Configuration Files
+
+### Backend Servers (asterisk-1, asterisk-2)
+
+Located in `ansible/roles/asterisk/templates/`:
+
+- **pjsip.conf.j2** - SIP transport and endpoint configuration
+- **extensions.conf.j2** - Dialplan with call outcome logic
+- **rtp.conf.j2** - RTP port configuration
+
+### Load Balancer (asterisk-balancer)
+
+Located in `ansible/roles/asterisk-balancer/templates/`:
+
+- **pjsip.conf.j2** - Backend endpoints with health checks
+- **extensions.conf.j2** - Load balancing dialplan (80/20 weighted)
+- **rtp.conf.j2** - RTP port configuration
+
+## Dialplan Logic
+
+### Backend Dialplan (extensions.conf)
+
+```
+[incoming]
+; Call arrives
+exten => _X.,1,NoOp(Incoming call)
+ same => n,Set(OUTCOME=${RAND(1,100)})
+ same => n,Set(RING_TIME=${RAND(10,20)})
+ same => n,Ringing()
+ same => n,Wait(${RING_TIME})
+
+ ; 1-12 = busy (12%)
+ same => n,GotoIf($[${OUTCOME} <= 12]?busy)
+ ; 13-45 = no answer (33%)
+ same => n,GotoIf($[${OUTCOME} <= 45]?noanswer)
+ ; 46-100 = answer (55%)
+ same => n,Goto(answer)
+
+ same => n(busy),Busy(5)
+ same => n,Hangup()
+
+ same => n(noanswer),Hangup(18)
+
+ same => n(answer),Answer()
+ same => n,Set(PLAY_TIME=${RAND(15,45)})
+ same => n(playloop),Playback(tt-monkeys)
+ same => n,GotoIf($[${EPOCH} < ${END_TIME}]?playloop)
+ same => n,Hangup()
 ```
 
-### 4. Stress Test
-```bash
-sipp -sn uac asterisk-balancer:5060 -r 10 -l 50 -d 120000
+### Balancer Dialplan
+
 ```
-- `-l 50` = Limit to 50 simultaneous calls
-- `-r 10` = 10 new calls per second
-
-## Understanding Results
-
-### Expected Call Outcomes
-
-If you make 100 calls, you should see approximately:
-- 12 calls with BUSY status
-- 33 calls with NO ANSWER
-- 55 calls ANSWERED
-
-### Checking Asterisk Logs
-
-```bash
-# View Asterisk-1 logs
-docker exec -it asterisk-1 tail -f /var/log/asterisk/messages
-
-# View what's happening in real-time
-docker exec -it asterisk-1 asterisk -rvvv
-```
-
-In the logs, look for:
-- `Call result: BUSY`
-- `Call result: NO ANSWER`
-- `Call result: ANSWERED`
-
-## SIP Commands Reference
-
-### In Asterisk CLI
-```bash
-# Show active calls
-core show channels
-
-# Show SIP peers (connections)
-sip show peers
-
-# Show detailed SIP channels
-sip show channels
-
-# Reload SIP configuration
-sip reload
-
-# Show dialplan
-dialplan show
-```
-
-### Testing Load Balancer
-
-```bash
-# Check Kamailio dispatcher list
-docker exec -it asterisk-balancer kamctl dispatcher dump
-
-# Check Kamailio status
-docker exec -it asterisk-balancer kamctl stats
+[balancer]
+; Weighted random selection: 1-4 = asterisk-1 (80%), 5 = asterisk-2 (20%)
+exten => _X.,1,Set(WEIGHT_ROLL=${RAND(1,5)})
+ same => n,GotoIf($[${WEIGHT_ROLL} <= 4]?route_ast1:route_ast2)
+ same => n(route_ast1),Dial(PJSIP/${EXTEN}@asterisk-1,60)
+ same => n,Hangup()
+ same => n(route_ast2),Dial(PJSIP/${EXTEN}@asterisk-2,60)
+ same => n,Hangup()
 ```
 
 ## Troubleshooting
 
-### No calls reaching Asterisk
-
-1. Check if Kamailio is running:
-```bash
-docker exec -it asterisk-balancer ps aux | grep kamailio
-```
-
-2. Check Asterisk is listening:
-```bash
-docker exec -it asterisk-1 asterisk -rx "sip show settings" | grep "SIP Port"
-```
-
-3. Check network connectivity:
-```bash
-docker exec -it sipp ping asterisk-balancer
-```
-
-### Calls failing immediately
-
-1. Check Asterisk dialplan:
-```bash
-docker exec -it asterisk-1 asterisk -rx "dialplan show"
-```
-
-2. Watch SIP messages:
-```bash
-docker exec -it asterisk-1 asterisk -rvvv
-# Then in CLI:
-sip set debug on
-```
-
-### Load balancing not distributing correctly
-
-1. Check dispatcher list weights:
-```bash
-cat asterisk-balancer/config/dispatcher.list
-```
-
-Should show:
-```
-1 sip:asterisk-1:5060 0 80
-1 sip:asterisk-2:5060 0 20
-```
-
-## Audio Files
-
-The `tt-monkeys` audio file is part of Asterisk's core sound package. It's a standard test sound file included with Asterisk.
-
-Other available sounds:
-- `demo-congrats`
-- `hello-world`
-- `tt-weasels`
-
-## Advanced: Custom SIP Scenario
-
-Create `/scenarios/custom.xml` in the SIPp container and use:
+### No SIP Registration
 
 ```bash
-sipp -sf /scenarios/custom.xml asterisk-balancer:5060
+# Check if PJSIP is loaded
+asterisk -rx 'module show like pjsip'
+
+# Check transport status
+asterisk -rx 'pjsip show transports'
+
+# Check endpoint status
+asterisk -rx 'pjsip show endpoints'
 ```
 
-## Performance Metrics
-
-Monitor system during load test:
+### Calls Not Routing
 
 ```bash
-# Watch resources
-docker stats
+# Enable SIP debugging
+asterisk -rx 'pjsip set logger on'
 
-# Monitor Asterisk channels
-watch -n 1 'docker exec asterisk-1 asterisk -rx "core show channels"'
+# Check dialplan
+asterisk -rx 'dialplan show'
 
-# Monitor call rate
-docker exec -it sipp sipp -sn uac asterisk-balancer:5060 -r 10 -m 1000 -trace_stat
+# Test dialplan
+asterisk -rx 'dialplan show incoming@incoming'
 ```
 
-## Summary
+### Audio Issues
 
-This setup simulates a production VoIP infrastructure where:
-1. Calls come in through a load balancer (Kamailio)
-2. Calls are distributed 80/20 to two Asterisk servers
-3. Each Asterisk server processes calls with realistic behavior (ringing, busy, no answer, answered with audio)
-4. SIPp generates test traffic to verify the setup
+```bash
+# Check RTP configuration
+asterisk -rx 'rtp show settings'
 
-The configuration demonstrates:
-- SIP load balancing with weighted distribution
-- Asterisk dialplan programming
-- Call flow management
-- Audio playback in VoIP calls
+# Verify codecs
+asterisk -rx 'core show codecs'
+```
+
+## Docker Testing
+
+### Container IPs
+
+| Container | IP |
+|-----------|-----|
+| asterisk-1-test | 172.20.0.40 |
+| asterisk-2-test | 172.20.0.41 |
+| asterisk-balancer-test | 172.20.0.42 |
+
+### Local Ports
+
+| Service | Port |
+|---------|------|
+| Balancer | localhost:5060 |
+| asterisk-1 | localhost:5061 |
+| asterisk-2 | localhost:5062 |
+
+### Testing Commands
+
+```bash
+# Check all containers
+for c in asterisk-1-test asterisk-2-test asterisk-balancer-test; do
+  echo "=== $c ==="
+  docker exec $c asterisk -rx 'core show version'
+done
+
+# Check balancer endpoints
+docker exec asterisk-balancer-test asterisk -rx 'pjsip show endpoints'
+```
+
+## SIP Protocol Basics
+
+### Call Flow
+
+1. **INVITE** - Initiate call
+2. **100 Trying** - Request received
+3. **180 Ringing** - Phone ringing
+4. **200 OK** - Call answered (or 486 Busy / timeout)
+5. **ACK** - Acknowledgment
+6. **RTP** - Audio stream
+7. **BYE** - End call
+8. **200 OK** - Confirmation
+
+### Ports
+
+- **5060/UDP** - SIP signaling
+- **10000-20000/UDP** - RTP media (audio)
+
+## References
+
+- [Asterisk Documentation](https://docs.asterisk.org/)
+- [PJSIP Configuration](https://docs.asterisk.org/Asterisk_22_Documentation/API_Documentation/Dialplan_Applications/PJSIP_Configuration_Module/)
+- [Dialplan Basics](https://docs.asterisk.org/Configuration/Dialplan/)
