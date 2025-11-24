@@ -1,88 +1,100 @@
-# Docker Compose for testing Ansible playbooks locally
-# All containers use the same base image (vm-base:debian12) and are configured via Ansible
+version: '3.8'
+
+# This docker-compose starts base Debian 12 containers that simulate VMs
+# Terraform will then provision them via SSH, just like real VMs
 
 services:
   # Task 1: MariaDB Primary/Replica
-  maria-primary-test:
+  maria-primary:
     image: vm-base:debian12
-    container_name: maria-primary-test
-    hostname: maria-primary-test
+    container_name: maria-primary
+    hostname: maria-primary
     networks:
       testnet:
         ipv4_address: 172.20.0.10
     ports:
-      - "3306:3306"
-      - "2201:22"
+      - "2201:22"    # SSH only, services will be configured by Terraform
+      - "3306:3306"  # MariaDB port (will be used after provisioning)
+    volumes:
+      - ./maria-primary/data:/var/lib/mysql
     restart: unless-stopped
 
-  maria-replica-test:
+  maria-replica:
     image: vm-base:debian12
-    container_name: maria-replica-test
-    hostname: maria-replica-test
+    container_name: maria-replica
+    hostname: maria-replica
     networks:
       testnet:
         ipv4_address: 172.20.0.11
     ports:
-      - "3307:3306"
       - "2202:22"
+      - "3307:3306"
+    volumes:
+      - ./maria-replica/data:/var/lib/mysql
     restart: unless-stopped
 
   # Task 2: PostgreSQL Primary + Replicas + Load Balancer
-  postgres-primary-test:
+  postgres-primary:
     image: vm-base:debian12
-    container_name: postgres-primary-test
-    hostname: postgres-primary-test
+    container_name: postgres-primary
+    hostname: postgres-primary
     networks:
       testnet:
         ipv4_address: 172.20.0.20
     ports:
-      - "5432:5432"
       - "2203:22"
+      - "5432:5432"
+    volumes:
+      - ./postgres-primary/data:/var/lib/postgresql
     restart: unless-stopped
 
-  postgres-replica-1-test:
+  postgres-replica-1:
     image: vm-base:debian12
-    container_name: postgres-replica-1-test
-    hostname: postgres-replica-1-test
+    container_name: postgres-replica-1
+    hostname: postgres-replica-1
     networks:
       testnet:
         ipv4_address: 172.20.0.21
     ports:
-      - "5433:5432"
       - "2204:22"
+      - "5433:5432"
+    volumes:
+      - ./postgres-replica-1/data:/var/lib/postgresql
     restart: unless-stopped
 
-  postgres-replica-2-test:
+  postgres-replica-2:
     image: vm-base:debian12
-    container_name: postgres-replica-2-test
-    hostname: postgres-replica-2-test
+    container_name: postgres-replica-2
+    hostname: postgres-replica-2
     networks:
       testnet:
         ipv4_address: 172.20.0.22
     ports:
-      - "5434:5432"
       - "2205:22"
+      - "5434:5432"
+    volumes:
+      - ./postgres-replica-2/data:/var/lib/postgresql
     restart: unless-stopped
 
-  postgres-balancer-test:
+  postgres-balancer:
     image: vm-base:debian12
-    container_name: postgres-balancer-test
-    hostname: postgres-balancer-test
+    container_name: postgres-balancer
+    hostname: postgres-balancer
     networks:
       testnet:
         ipv4_address: 172.20.0.23
     ports:
-      - "5435:5433"
-      - "5436:5432"
-      - "8404:8404"
       - "2206:22"
+      - "5435:5433"  # Read port
+      - "5436:5432"  # Write port
+      - "8404:8404"  # HAProxy stats
     restart: unless-stopped
 
   # Task 3: Nginx Reverse Proxy + App Servers
-  app-1-test:
+  app-1:
     image: vm-base:debian12
-    container_name: app-1-test
-    hostname: app-1-test
+    container_name: app-1
+    hostname: app-1
     networks:
       testnet:
         ipv4_address: 172.20.0.30
@@ -90,10 +102,10 @@ services:
       - "2207:22"
     restart: unless-stopped
 
-  app-2-test:
+  app-2:
     image: vm-base:debian12
-    container_name: app-2-test
-    hostname: app-2-test
+    container_name: app-2
+    hostname: app-2
     networks:
       testnet:
         ipv4_address: 172.20.0.31
@@ -101,63 +113,66 @@ services:
       - "2208:22"
     restart: unless-stopped
 
-  nginx-test:
+  nginx:
     image: vm-base:debian12
-    container_name: nginx-test
-    hostname: nginx-test
+    container_name: nginx
+    hostname: nginx
     networks:
       testnet:
         ipv4_address: 172.20.0.32
     ports:
-      - "8000:8000"
       - "2209:22"
+      - "8000:8000"  # HTTP port
+    volumes:
+      - ./nginx/logs:/var/log/nginx
     restart: unless-stopped
 
-  # Task 4: Asterisk Servers + Load Balancer
-  asterisk-1-test:
+  # Task 4: Asterisk PBX + Kamailio Load Balancer
+  asterisk-1:
     image: vm-base:debian12
-    container_name: asterisk-1-test
-    hostname: asterisk-1-test
+    container_name: asterisk-1
+    hostname: asterisk-1
     networks:
       testnet:
         ipv4_address: 172.20.0.40
     ports:
+      - "2210:22"
       - "5061:5060/udp"
       - "5061:5060/tcp"
-      - "2210:22"
+      - "10000-10100:10000-10100/udp"  # RTP ports
     restart: unless-stopped
 
-  asterisk-2-test:
+  asterisk-2:
     image: vm-base:debian12
-    container_name: asterisk-2-test
-    hostname: asterisk-2-test
+    container_name: asterisk-2
+    hostname: asterisk-2
     networks:
       testnet:
         ipv4_address: 172.20.0.41
     ports:
+      - "2211:22"
       - "5062:5060/udp"
       - "5062:5060/tcp"
-      - "2211:22"
+      - "10200-10300:10000-10100/udp"  # RTP ports
     restart: unless-stopped
 
-  asterisk-balancer-test:
+  asterisk-balancer:
     image: vm-base:debian12
-    container_name: asterisk-balancer-test
-    hostname: asterisk-balancer-test
+    container_name: asterisk-balancer
+    hostname: asterisk-balancer
     networks:
       testnet:
         ipv4_address: 172.20.0.42
     ports:
+      - "2212:22"
       - "5060:5060/udp"
       - "5060:5060/tcp"
-      - "2212:22"
     restart: unless-stopped
 
-  # SIPp testing tool
-  sipp-test:
+  sipp:
     image: vm-base:debian12
-    container_name: sipp-test
-    hostname: sipp-test
+    container_name: sipp
+    hostname: sipp
     networks:
       testnet:
         ipv4_address: 172.20.0.50

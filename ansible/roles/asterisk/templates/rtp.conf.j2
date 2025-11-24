@@ -1,0 +1,9 @@
+; RTP Configuration - Managed by Ansible
+
+[general]
+rtpstart={{ asterisk_rtp_start }}
+rtpend={{ asterisk_rtp_end }}
+; Enable strict RTP to help with NAT traversal
+strictrtp=yes
+; RTP checksums
+rtpchecksums=yes

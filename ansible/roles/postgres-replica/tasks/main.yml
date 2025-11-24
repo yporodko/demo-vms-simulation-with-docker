@@ -1,0 +1,155 @@
+---
+# PostgreSQL Replica Installation and Configuration
+
+- name: Install required packages for adding PostgreSQL repository
+  apt:
+    name:
+      - wget
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+  tags: postgres
+
+- name: Add PostgreSQL APT repository key
+  shell: |
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+  args:
+    creates: /etc/apt/trusted.gpg.d/postgresql.gpg
+  tags: postgres
+
+- name: Add PostgreSQL APT repository
+  apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+  tags: postgres
+
+- name: Update apt cache after adding PostgreSQL repository
+  apt:
+    update_cache: yes
+  tags: postgres
+
+- name: Install PostgreSQL packages
+  apt:
+    name:
+      - postgresql-{{ postgres_version }}
+      - postgresql-client-{{ postgres_version }}
+      - postgresql-contrib-{{ postgres_version }}
+      - python3-psycopg2  # Required for Ansible postgresql modules
+    state: present
+    update_cache: yes
+  tags: postgres
+
+- name: Check if PostgreSQL cluster exists
+  stat:
+    path: /var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION
+  register: pg_cluster_exists
+  tags: postgres
+
+- name: Create minimal PostgreSQL cluster if needed (will be replaced by base backup)
+  command: pg_createcluster {{ postgres_version }} main
+  when: not pg_cluster_exists.stat.exists
+  tags: postgres
+
+- name: Stop PostgreSQL for initial replication setup
+  service:
+    name: postgresql
+    state: stopped
+  tags: postgres
+
+- name: Check if PostgreSQL data directory is empty or needs initialization
+  stat:
+    path: /var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION
+  register: pg_version_file
+  tags: postgres
+
+- name: Remove existing PostgreSQL data directory if it exists
+  file:
+    path: /var/lib/postgresql/{{ postgres_version }}/main
+    state: absent
+  when: not pg_version_file.stat.exists or (pg_version_file.stat.exists and postgres_force_reinit | default(false))
+  tags: postgres
+
+- name: Create empty data directory
+  file:
+    path: /var/lib/postgresql/{{ postgres_version }}/main
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+  tags: postgres
+
+- name: Create .pgpass file for replication user
+  copy:
+    content: "{{ postgres_primary_host }}:{{ postgres_primary_port }}:replication:{{ postgres_repl_user }}:{{ postgres_repl_password }}"
+    dest: /var/lib/postgresql/.pgpass
+    owner: postgres
+    group: postgres
+    mode: '0600'
+  tags: postgres
+
+- name: Perform base backup from primary
+  shell: |
+    PGPASSFILE=/var/lib/postgresql/.pgpass pg_basebackup \
+      -h {{ postgres_primary_host }} \
+      -p {{ postgres_primary_port }} \
+      -U {{ postgres_repl_user }} \
+      -D /var/lib/postgresql/{{ postgres_version }}/main \
+      -Fp -Xs -P -R
+  become: yes
+  become_user: postgres
+  when: not pg_version_file.stat.exists or (pg_version_file.stat.exists and postgres_force_reinit | default(false))
+  tags: postgres_replication
+
+- name: Configure PostgreSQL for replica
+  template:
+    src: postgresql.conf.j2
+    dest: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+    owner: postgres
+    group: postgres
+    mode: '0644'
+  notify: restart postgresql
+  tags: postgres_config
+
+- name: Configure PostgreSQL authentication (pg_hba.conf)
+  template:
+    src: pg_hba.conf.j2
+    dest: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  notify: restart postgresql
+  tags: postgres_config
+
+- name: Check if systemd is available and running
+  shell: systemctl is-system-running 2>/dev/null || echo "not-running"
+  register: systemd_check
+  failed_when: false
+  changed_when: false
+  tags: postgres_config
+
+- name: Create symlinks for config files in data directory (Docker compatibility)
+  file:
+    src: "/etc/postgresql/{{ postgres_version }}/main/{{ item }}"
+    dest: "/var/lib/postgresql/{{ postgres_version }}/main/{{ item }}"
+    state: link
+    force: yes
+  loop:
+    - postgresql.conf
+    - pg_hba.conf
+  when: "'not-running' in systemd_check.stdout"
+  tags: postgres_config
+
+- name: Ensure PostgreSQL is running
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
+  tags: postgres
+
+- name: Wait for PostgreSQL to be ready
+  wait_for:
+    port: "{{ postgres_port }}"
+    timeout: 30
+  tags: postgres

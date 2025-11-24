@@ -1,342 +1,244 @@
-# Infrastructure Test Tasks - Docker Simulation
+# Infrastructure Configuration with Ansible
 
-This repository contains a complete Docker-based simulation of the infrastructure test tasks, replacing VMs with Docker containers.
+Automated configuration management for VoIP and database infrastructure using Ansible.
 
 ## Overview
 
-All services are containerized with:
-- Individual Dockerfiles per service
-- Shared network (172.20.0.0/16)
-- Persistent data volumes mapped to local directories
-- SSH access to all containers (user: `testuser`, password: `testpass`)
-- Configuration files mapped from local directories
-
-## Architecture
-
-### Task 1: MariaDB Primary/Replica
-- **maria-primary** (172.20.0.10) - Primary MariaDB server
-- **maria-replica** (172.20.0.11) - Replica MariaDB server
-- Pre-configured with replication and voip_db database
-
-### Task 2: PostgreSQL with Load Balancing
-- **postgres-primary** (172.20.0.20) - Primary PostgreSQL 9.6 server
-- **postgres-replica-1** (172.20.0.21) - First replica
-- **postgres-replica-2** (172.20.0.22) - Second replica
-- **postgres-balancer** (172.20.0.23) - HAProxy load balancer
-  - Port 5432: Write queries (primary)
-  - Port 5433: Read queries (load balanced across replicas)
-  - Port 8404: HAProxy statistics page
-
-### Task 3: Nginx Reverse Proxy
-- **nginx** (172.20.0.32) - Reverse proxy with DDoS protection
-- **app-1** (172.20.0.30) - Backend app server
-- **app-2** (172.20.0.31) - Backend app server
-- Load balancing with least_conn algorithm
-
-### Task 4: Asterisk VoIP Load Balancing
-- **asterisk-1** (172.20.0.40) - Asterisk PBX server (handles 80% of calls)
-- **asterisk-2** (172.20.0.41) - Asterisk PBX server (handles 20% of calls)
-- **asterisk-balancer** (172.20.0.42) - Kamailio SIP load balancer
-- **sipp** (172.20.0.50) - SIPp testing tool
+This project uses **Ansible** to configure and manage:
+- MariaDB Primary/Replica (replication setup)
+- PostgreSQL Primary + 2 Replicas + HAProxy load balancer
+- Nginx reverse proxy with DDoS protection
+- Application servers
+- Asterisk VoIP servers + Kamailio load balancer
+- SIPp testing tools
 
 ## Quick Start
 
 ### Prerequisites
-- Docker
-- Docker Compose
 
-### Build and Start All Services
+- Ansible installed: `pip3 install ansible` or `brew install ansible`
+- Docker installed (for local testing)
+- SSH access to VMs configured in `~/.ssh/config`
+- SSH key: `~/.ssh/redi_test_key`
 
-```bash
-# Build all containers
-docker-compose build
-
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Check status
-docker-compose ps
-```
-
-### Stop All Services
+### Option 1: Test Locally with Docker (Recommended)
 
 ```bash
-docker-compose down
+# Start Docker containers and configure SSH
+./test-docker.sh start
+
+# Deploy maria-primary to Docker
+./test-docker.sh deploy
+
+# Verify
+./test-docker.sh ssh maria-primary-test
+mysql -u app_user -papp_password voip_db -e "SHOW TABLES;"
 ```
 
-## Port Mappings
-
-| Service | Internal Port | Host Port | Description |
-|---------|--------------|-----------|-------------|
-| maria-primary | 3306, 22 | 3306, 2201 | MariaDB, SSH |
-| maria-replica | 3306, 22 | 3307, 2202 | MariaDB, SSH |
-| postgres-primary | 5432, 22 | 5432, 2203 | PostgreSQL, SSH |
-| postgres-replica-1 | 5432, 22 | 5433, 2204 | PostgreSQL, SSH |
-| postgres-replica-2 | 5432, 22 | 5434, 2205 | PostgreSQL, SSH |
-| postgres-balancer | 5433, 5432, 8404, 22 | 5435, 5436, 8404, 2206 | Load balancer, Stats, SSH |
-| app-1 | 22 | 2207 | SSH |
-| app-2 | 22 | 2208 | SSH |
-| nginx | 80, 22 | 80, 2209 | HTTP, SSH |
-| asterisk-1 | 5060, 22 | 5061, 2210 | SIP, SSH |
-| asterisk-2 | 5060, 22 | 5062, 2211 | SIP, SSH |
-| asterisk-balancer | 5060, 22 | 5060, 2212 | SIP, SSH |
-| sipp | 22 | 2213 | SSH |
-
-## SSH Access
-
-All containers have SSH enabled:
+### Option 2: Deploy to Production VMs
 
 ```bash
-# SSH to any container (example: maria-primary)
-ssh -p 2201 testuser@localhost
-# Password: testpass
+cd ansible
 
-# Or use docker exec
-docker exec -it maria-primary bash
+# Test connection
+ansible maria-primary -m ping
+
+# Deploy (dry run first)
+ansible-playbook playbooks/maria-primary.yml --check
+
+# Deploy for real
+ansible-playbook playbooks/maria-primary.yml
+
+# Verify
+ssh maria-primary
+mysql -u app_user -papp_password voip_db -e "SHOW TABLES;"
 ```
 
-## Testing Instructions
+## Documentation
 
-### Task 1: MariaDB Primary/Replica
+### Development Pattern ⭐ NEW
+- **[INFRASTRUCTURE_PATTERN.md](INFRASTRUCTURE_PATTERN.md)** - **Standard pattern for all infrastructure components**
+  - Unified Ansible roles and playbooks
+  - Docker-based local testing
+  - Automated test scripts
+  - Test locally first, then deploy to production
+  - **Use this for all new infrastructure work!**
 
-```bash
-# Connect to primary
-mysql -h localhost -P 3306 -u app_user -papp_password
+### Getting Started
+- **[ansible/DOCKER-TESTING.md](ansible/DOCKER-TESTING.md)** - Test playbooks locally with Docker (recommended first step)
+- **[ansible/QUICK-START.md](ansible/QUICK-START.md)** - 5-minute getting started guide
+- **[ansible/ANSIBLE-BEGINNERS-GUIDE.md](ansible/ANSIBLE-BEGINNERS-GUIDE.md)** - Complete Ansible tutorial
+- **[ansible/README.md](ansible/README.md)** - Ansible setup reference
 
-# Check primary status
-SHOW MASTER STATUS;
+### Infrastructure Details
+- **[docs/NGINX-DDOS-PROTECTION.md](docs/NGINX-DDOS-PROTECTION.md)** - Nginx DDoS protection configuration
+- **[docs/ASTERISK-GUIDE.md](docs/ASTERISK-GUIDE.md)** - VoIP and SIP configuration
+- **[docs/KAMAILIO-CHANGE.md](docs/KAMAILIO-CHANGE.md)** - Kamailio load balancer notes
 
-# Use the database
-USE voip_db;
-SELECT * FROM calls;
+### Archived Documentation
+- **[docs/archived/](docs/archived/)** - Previous approaches (for reference)
 
-# Insert test data on primary
-INSERT INTO calls (caller_id, callee_id, call_status, codec_used, call_direction, call_cost)
-VALUES ('9999999999', '8888888888', 'connected', 'G.711', 'outbound', 0.15);
+## Directory Structure
 
-# Connect to replica and verify replication
-mysql -h localhost -P 3307 -u app_user -papp_password
-
-# Check replica status
-SHOW SLAVE STATUS\G
-
-# Verify data replicated
-USE voip_db;
-SELECT * FROM calls;
 ```
+.
+├── ansible/                    # Ansible configuration (MAIN TOOL)
+│   ├── inventory/             # VM definitions
+│   ├── roles/                 # Reusable configurations
+│   │   ├── common/           # Base setup for all servers
+│   │   └── mariadb-primary/  # MariaDB primary server
+│   └── playbooks/            # Deployment orchestration
+│
+├── docker-compose.yml         # Docker simulation (for local testing)
+├── docker-base/              # Base VM simulation image
+│
+├── maria-primary/            # MariaDB primary config files
+├── postgres-primary/         # PostgreSQL primary config
+├── nginx/                    # Nginx reverse proxy
+├── asterisk-1/              # Asterisk VoIP servers
+│
+├── VM hosts.txt             # VM inventory (hostname IP pairs)
+└── docs/                    # Documentation
+```
+
+## Project Tasks
+
+This infrastructure supports 4 main tasks:
+
+### Task 1: MariaDB Replication
+- **Primary:** maria-primary (157.180.114.52)
+- **Replica:** maria-replica (37.27.248.240)
+- Binary log replication, read-only replica
+- Database: voip_db
 
 ### Task 2: PostgreSQL Load Balancing
-
-```bash
-# Connect to primary for writes
-psql -h localhost -p 5432 -U postgres -d ecommerce
-
-# Check replication status
-SELECT * FROM pg_stat_replication;
-
-# Insert test data
-INSERT INTO orders (customer_id, total_amount, status, shipping_address, payment_method)
-VALUES (4, 199.99, 'pending', '321 Elm St, Portland, OR', 'credit_card');
-
-# Connect to load balancer for reads (port 5433 -> distributed across replicas)
-psql -h localhost -p 5435 -U postgres -d ecommerce
-
-# Execute read queries (will be balanced)
-SELECT * FROM orders;
-
-# Check HAProxy stats
-# Open in browser: http://localhost:8404/stats
-
-# Test individual replicas
-psql -h localhost -p 5433 -U postgres -d ecommerce  # replica-1
-psql -h localhost -p 5434 -U postgres -d ecommerce  # replica-2
-```
+- **Primary:** postgres-primary (46.62.207.138)
+- **Replicas:** postgres-replica-1, postgres-replica-2
+- **Load Balancer:** HAProxy (reads: 5433, writes: 5432, stats: 8404)
+- Database: ecommerce
 
 ### Task 3: Nginx Reverse Proxy
+- **Proxy:** nginx (157.180.118.98)
+- **Backends:** app-1, app-2
+- DDoS protection, load balancing, health checks
+- Port: 8000
+
+### Task 4: Asterisk VoIP
+- **PBX Servers:** asterisk-1, asterisk-2
+- **Load Balancer:** Kamailio (80/20 split)
+- **Testing:** SIPp tool
+
+## Current Status
+
+### ✅ Implemented (Following Infrastructure Pattern)
+- **Common role** - Base system setup for all servers
+- **MariaDB Primary + Replica** - Complete replication setup
+  - ✅ Unified Ansible playbooks
+  - ✅ Docker test environment
+  - ✅ Automated test script (13 tests)
+  - ✅ Works identically in Docker and production
+- **Infrastructure Pattern** - Reusable template and documentation
+  - See `INFRASTRUCTURE_PATTERN.md` for details
+  - Template available in `ansible/templates/component-template/`
+
+### 🔄 To Do (Apply Infrastructure Pattern)
+- PostgreSQL Primary + 2 Replicas
+- HAProxy load balancer for PostgreSQL
+- Nginx reverse proxy
+- Application servers
+- Asterisk VoIP servers
+- Kamailio load balancer
+
+## Common Commands
+
+### Testing (Following Infrastructure Pattern)
 
 ```bash
-# Test load balancing (should alternate between app-1 and app-2)
-curl http://localhost/
+# Test MariaDB on Docker
+cd ansible
+./test-mariadb.sh docker
 
-# Run multiple requests to see load balancing
-for i in {1..10}; do curl http://localhost/; echo "---"; done
+# Test MariaDB on production
+./test-mariadb.sh prod
 
-# Test health check endpoint
-curl http://localhost/health
-
-# Load test with Apache Bench (if installed)
-ab -n 1000 -c 10 http://localhost/
-
-# Monitor Nginx logs
-docker exec -it nginx tail -f /var/log/nginx/access.log
+# Test both environments
+./test-mariadb.sh all
 ```
 
-### Task 4: Asterisk Load Balancing
-
-#### Understanding Asterisk Configuration
-
-The Asterisk servers are configured to:
-1. Ring for 10-20 seconds (random)
-2. Respond with:
-   - 12% BUSY
-   - 33% NO ANSWER
-   - 55% ANSWERED (plays tt-monkeys for 15-45 seconds)
-
-#### Testing with SIPp
+### Deployment
 
 ```bash
-# SSH into SIPp container
-docker exec -it sipp bash
+# Deploy to Docker (test first!)
+cd ansible
+ansible-playbook -i inventory/hosts-docker-test.yml playbooks/mariadb.yml
 
-# Simple test call to load balancer (80% -> asterisk-1, 20% -> asterisk-2)
-sipp -sn uac asterisk-balancer:5060 -m 1 -r 1 -rp 1000
+# Deploy to production (after Docker tests pass)
+ansible-playbook playbooks/mariadb.yml
 
-# Run 10 calls at 1 call/second
-sipp -sn uac asterisk-balancer:5060 -m 10 -r 1 -d 60000
-
-# Run 100 calls to test distribution (check logs to verify 80/20 split)
-sipp -sn uac asterisk-balancer:5060 -m 100 -r 5
-
-# Test direct connection to asterisk-1
-sipp -sn uac asterisk-1:5060 -m 5 -r 1
-
-# Test direct connection to asterisk-2
-sipp -sn uac asterisk-2:5060 -m 5 -r 1
+# Dry run (check what would change)
+ansible-playbook playbooks/mariadb.yml --check
 ```
 
-#### Monitor Asterisk
+### General Commands
 
 ```bash
-# Connect to Asterisk CLI on asterisk-1
-docker exec -it asterisk-1 asterisk -rvvv
+# Test connectivity
+ansible all -m ping
 
-# Useful commands in Asterisk CLI:
-core show channels
-sip show peers
-sip show channels
-dialplan show
+# Check disk space
+ansible all -m shell -a "df -h"
 
-# View Asterisk logs
-docker exec -it asterisk-1 tail -f /var/log/asterisk/messages
-
-# Check Kamailio balancer
-docker exec -it asterisk-balancer kamctl dispatcher dump
+# Run single role/playbook
+ansible-playbook playbooks/mariadb-primary.yml
 ```
 
-## Configuration Files
+## VM Inventory
 
-All configuration files are in their respective directories and mapped as volumes:
+```
+maria-primary       157.180.114.52
+maria-replica       37.27.248.240
+postgres-primary    46.62.207.138
+postgres-replica-1  37.27.255.157
+postgres-replica-2  65.21.148.130
+nginx               157.180.118.98
+app-1               37.27.203.40
+app-2               46.62.196.149
+asterisk-1          46.62.200.187
+asterisk-2          95.216.205.250
+asterisk-balancer   37.27.35.37
+```
 
-- `maria-primary/config/my.cnf` - MariaDB primary config
-- `maria-replica/config/my.cnf` - MariaDB replica config
-- `postgres-*/config/postgresql.conf` - PostgreSQL configs
-- `postgres-balancer/config/haproxy.cfg` - HAProxy config
-- `nginx/config/nginx.conf` - Nginx main config
-- `nginx/config/default` - Nginx site config
-- `asterisk-*/config/` - Asterisk configurations (sip.conf, extensions.conf)
-- `asterisk-balancer/config/kamailio.cfg` - Kamailio config
-- `asterisk-balancer/config/dispatcher.list` - Load balancer weights
+## Why Ansible?
 
-## Data Persistence
+Switched from Terraform to Ansible because:
+- ✅ Better for configuration management (VMs already exist)
+- ✅ Drift detection - Detects and fixes manual changes
+- ✅ Idempotent - Safe to run multiple times
+- ✅ Incremental updates - Changes only what's needed
+- ✅ Native modules - mysql_user, mysql_db, service, etc.
 
-All data is persisted in local directories:
-- `maria-primary/data/` - MariaDB primary data
-- `maria-replica/data/` - MariaDB replica data
-- `postgres-*/data/` - PostgreSQL data directories
-- `asterisk-*/data/` - Asterisk data
-- `nginx/logs/` - Nginx access and error logs
+See `docs/archived/TERRAFORM-VS-ANSIBLE.md` for detailed comparison.
 
 ## Troubleshooting
 
-### Check container logs
 ```bash
-docker-compose logs <service-name>
-docker-compose logs -f maria-primary
+# Test SSH
+ssh maria-primary
+
+# Check inventory
+ansible-inventory --list
+
+# Verbose output
+ansible-playbook playbook.yml -vvv
+
+# Syntax validation
+ansible-playbook playbook.yml --syntax-check
 ```
 
-### Restart a specific service
-```bash
-docker-compose restart <service-name>
-```
+## References
 
-### Rebuild after config changes
-```bash
-docker-compose down
-docker-compose build --no-cache <service-name>
-docker-compose up -d
-```
-
-### Clean up everything (WARNING: deletes data)
-```bash
-docker-compose down -v
-rm -rf */data/*
-```
-
-### Check network connectivity
-```bash
-docker exec -it maria-primary ping postgres-primary
-docker exec -it nginx ping app-1
-```
-
-## Understanding Asterisk Call Flow
-
-1. **SIPp** sends INVITE to **asterisk-balancer:5060**
-2. **Kamailio** distributes to asterisk-1 (80%) or asterisk-2 (20%)
-3. **Asterisk** processes call:
-   - Rings for 10-20 seconds
-   - Randomly decides outcome (12% busy, 33% no answer, 55% answer)
-   - If answered, plays tt-monkeys sound for 15-45 seconds
-   - Hangs up
-
-## Performance Tuning
-
-### MariaDB
-- Configured for high traffic with 1GB buffer pool
-- Binary logging enabled for replication
-- Connection limit: 500
-
-### PostgreSQL
-- Streaming replication with hot standby
-- Configured with 256MB shared buffers
-
-### Nginx
-- Rate limiting enabled (10 req/s general, 5 req/s strict)
-- Connection limits (10 per IP)
-- Worker processes: auto
-- Worker connections: 10000
-
-### Asterisk
-- RTP ports: 10000-20000
-- Codecs: ulaw, alaw, gsm
-
-## Network Information
-
-All containers are on the same network: `172.20.0.0/16`
-
-Containers can reach each other using hostnames:
-- `maria-primary`, `maria-replica`
-- `postgres-primary`, `postgres-replica-1`, `postgres-replica-2`
-- `app-1`, `app-2`, `nginx`
-- `asterisk-1`, `asterisk-2`, `asterisk-balancer`
-
-## Additional Resources
-
-- MariaDB Replication: https://mariadb.com/kb/en/replication/
-- PostgreSQL Streaming Replication: https://www.postgresql.org/docs/9.6/warm-standby.html
-- HAProxy Documentation: http://www.haproxy.org/
-- Nginx Documentation: https://nginx.org/en/docs/
-- Asterisk Documentation: https://wiki.asterisk.org/
-- Kamailio Documentation: https://www.kamailio.org/docs/
-- SIPp Documentation: http://sipp.sourceforge.net/doc/
-
-## Security Note
-
-This setup uses simple passwords and no encryption for testing purposes only.
-For production use, implement:
-- Strong passwords
-- SSL/TLS encryption
-- Firewall rules
-- Proper authentication mechanisms
+- [Ansible Documentation](https://docs.ansible.com/)
+- [MariaDB Replication](https://mariadb.com/kb/en/setting-up-replication/)
+- [PostgreSQL Streaming Replication](https://www.postgresql.org/docs/current/warm-standby.html)
+- [HAProxy Configuration](https://www.haproxy.org/)
+- [Nginx Load Balancing](https://docs.nginx.com/nginx/admin-guide/load-balancer/)

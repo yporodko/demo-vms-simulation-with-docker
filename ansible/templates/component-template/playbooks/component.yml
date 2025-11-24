@@ -1,0 +1,14 @@
+---
+# Complete COMPONENT setup (Primary + Replica if applicable)
+# Works for both Docker testing and production VMs
+#
+# Usage:
+#   Docker:      ansible-playbook -i inventory/hosts-docker-test.yml playbooks/component.yml
+#   Production:  ansible-playbook playbooks/component.yml
+
+- name: Deploy COMPONENT Primary
+  import_playbook: component-primary.yml
+
+# Uncomment if you have a replica configuration
+# - name: Deploy COMPONENT Replica
+#   import_playbook: component-replica.yml

@@ -1,0 +1,67 @@
+---
+# Common role: Base system configuration for all servers
+# This is equivalent to provisioning/common/base-install.sh + base-configure.sh
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600  # Cache valid for 1 hour
+  tags: packages
+
+- name: Install base packages
+  apt:
+    name:
+      - openssh-server
+      - sudo
+      - vim
+      - net-tools
+      - iputils-ping
+      - curl
+      - wget
+      - ca-certificates
+    state: present
+  tags: packages
+
+- name: Ensure SSH service is running and enabled
+  service:
+    name: ssh
+    state: started
+    enabled: yes
+  tags: ssh
+
+- name: Create testuser with sudo access
+  user:
+    name: testuser
+    password: "{{ 'testpass' | password_hash('sha512') }}"
+    shell: /bin/bash
+    groups: sudo
+    append: yes
+    state: present
+  tags: users
+
+- name: Allow passwordless sudo for testuser
+  lineinfile:
+    path: /etc/sudoers.d/testuser
+    line: 'testuser ALL=(ALL) NOPASSWD:ALL'
+    create: yes
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  tags: users
+
+- name: Configure SSH to allow password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PasswordAuthentication'
+    line: 'PasswordAuthentication yes'
+    state: present
+  notify: restart ssh
+  tags: ssh
+
+- name: Configure SSH to allow root login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^#?PermitRootLogin'
+    line: 'PermitRootLogin yes'
+    state: present
+  notify: restart ssh
+  tags: ssh

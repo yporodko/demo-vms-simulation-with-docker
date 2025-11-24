@@ -1,0 +1,10 @@
+---
+# Handlers for COMPONENT Primary
+
+- name: restart component
+  shell: /usr/sbin/service component restart
+  async: 1
+  poll: 0
+  ignore_errors: yes
+  # Note: Async mode and ignore_errors are used for Docker compatibility
+  # where systemd may not be available

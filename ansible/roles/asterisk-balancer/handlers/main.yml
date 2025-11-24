@@ -1,0 +1,10 @@
+---
+# Asterisk Balancer Handlers
+
+- name: restart asterisk
+  service:
+    name: asterisk
+    state: restarted
+
+- name: reload asterisk
+  command: asterisk -rx "core reload"

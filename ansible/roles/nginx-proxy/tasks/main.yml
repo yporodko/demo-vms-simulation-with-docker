@@ -1,0 +1,58 @@
+---
+# Nginx Reverse Proxy Installation and Configuration
+
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+  tags: nginx
+
+- name: Remove default nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+  tags: nginx
+
+- name: Deploy main Nginx configuration
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'nginx -t -c %s'
+  notify: reload nginx
+  tags: nginx
+
+- name: Deploy reverse proxy configuration
+  template:
+    src: proxy.conf.j2
+    dest: /etc/nginx/sites-available/proxy.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload nginx
+  tags: nginx
+
+- name: Enable reverse proxy site
+  file:
+    src: /etc/nginx/sites-available/proxy.conf
+    dest: /etc/nginx/sites-enabled/proxy.conf
+    state: link
+  notify: reload nginx
+  tags: nginx
+
+- name: Ensure Nginx is running
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+  tags: nginx
+
+- name: Verify Nginx is listening on proxy port
+  wait_for:
+    port: "{{ nginx_proxy_port }}"
+    timeout: 30
+  tags: verify

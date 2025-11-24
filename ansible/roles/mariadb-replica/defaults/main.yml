@@ -1,0 +1,30 @@
+---
+# MariaDB Replica Configuration Variables
+# These can be overridden in playbooks or inventory
+
+mariadb_version: "10.11"
+mariadb_server_id: 2  # Must be unique! Change for additional replicas
+
+# Primary server connection details
+mariadb_primary_host: "maria-primary"  # Hostname or IP of primary server
+mariadb_repl_user: "repl"
+mariadb_repl_password: "replpass"
+
+# Application access
+mariadb_app_user: "app_user"
+mariadb_app_password: "app_password"
+mariadb_database: "voip_db"
+
+# Replica-specific settings
+mariadb_read_only: 1  # Replica is read-only
+mariadb_relay_log: "relay-bin"
+mariadb_relay_log_index: "relay-bin.index"
+
+# Performance settings
+mariadb_max_connections: 500
+mariadb_innodb_buffer_pool_size: "1G"
+mariadb_bind_address: "0.0.0.0"
+
+# Replication settings
+mariadb_slave_parallel_threads: 4
+mariadb_slave_parallel_mode: "conservative"

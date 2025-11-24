@@ -1,0 +1,40 @@
+; PJSIP Configuration - Managed by Ansible
+; Asterisk Backend Server
+
+[global]
+type=global
+user_agent=Asterisk PBX
+
+[transport-udp]
+type=transport
+protocol=udp
+bind={{ asterisk_sip_bindaddr }}:{{ asterisk_sip_port }}
+
+; Anonymous endpoint for incoming calls (from balancer or external)
+[anonymous]
+type=endpoint
+context={{ asterisk_incoming_context }}
+disallow=all
+allow=ulaw
+allow=alaw
+allow=gsm
+direct_media=no
+trust_id_inbound=yes
+
+; Endpoint for receiving calls from the balancer
+[from-balancer]
+type=endpoint
+context={{ asterisk_incoming_context }}
+disallow=all
+allow=ulaw
+allow=alaw
+allow=gsm
+direct_media=no
+trust_id_inbound=yes
+
+; ACL to allow calls from balancer
+[acl]
+type=acl
+deny=0.0.0.0/0.0.0.0
+permit=127.0.0.1/255.255.255.255
+permit={{ hostvars['asterisk-balancer']['ansible_host'] | default('37.27.35.37') }}/255.255.255.255

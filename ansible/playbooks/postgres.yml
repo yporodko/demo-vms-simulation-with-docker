@@ -1,0 +1,13 @@
+---
+# Complete PostgreSQL replication setup (Primary + Replicas)
+# Works for both Docker testing and production VMs
+#
+# Usage:
+#   Docker:      ansible-playbook -i inventory/hosts-docker-test.yml playbooks/postgres.yml
+#   Production:  ansible-playbook playbooks/postgres.yml
+
+- name: Deploy PostgreSQL Primary
+  import_playbook: postgres-primary.yml
+
+- name: Deploy PostgreSQL Replicas
+  import_playbook: postgres-replica.yml

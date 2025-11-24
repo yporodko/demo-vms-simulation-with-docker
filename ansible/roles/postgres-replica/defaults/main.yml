@@ -1,0 +1,31 @@
+---
+# PostgreSQL Replica Configuration Variables
+# These can be overridden in playbooks or inventory
+
+postgres_version: "9.6"
+
+# Primary server connection
+postgres_primary_host: "postgres-primary"  # Hostname or IP of primary server
+postgres_primary_port: 5432
+postgres_repl_user: "replicator"
+postgres_repl_password: "repl_password"
+
+# Application access (read-only on replica)
+postgres_app_user: "app_user"
+postgres_app_password: "app_password"
+postgres_database: "ecommerce"
+
+# Performance settings
+postgres_max_connections: 200
+postgres_shared_buffers: "256MB"
+postgres_effective_cache_size: "1GB"
+postgres_work_mem: "4MB"
+postgres_maintenance_work_mem: "64MB"
+
+# Network settings
+postgres_listen_addresses: "*"
+postgres_port: 5432
+
+# Replica settings
+postgres_hot_standby: "on"
+postgres_max_standby_streaming_delay: "30s"

@@ -1,0 +1,40 @@
+---
+# Test playbook for maria-primary on Docker
+# Usage: ansible-playbook -i inventory/hosts-docker-test.yml playbooks/maria-primary-test.yml
+
+- name: Configure MariaDB Primary Server (Docker Test)
+  hosts: maria-primary-test
+  become: yes
+
+  roles:
+    - common           # Install base packages, create testuser
+    - mariadb-primary  # Install and configure MariaDB
+
+  tasks:
+    - name: Verify MariaDB is running
+      service:
+        name: mariadb
+        state: started
+      tags: verify
+
+    - name: Test MySQL connection
+      command: mysql -u app_user -papp_password voip_db -e "SELECT VERSION();"
+      register: mysql_version
+      changed_when: false
+      tags: verify
+
+    - name: Show MySQL version
+      debug:
+        var: mysql_version.stdout_lines
+      tags: verify
+
+    - name: Show master status
+      command: mysql -u root -e "SHOW MASTER STATUS;"
+      register: master_status
+      changed_when: false
+      tags: verify
+
+    - name: Display master status
+      debug:
+        var: master_status.stdout_lines
+      tags: verify

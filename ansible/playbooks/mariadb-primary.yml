@@ -1,0 +1,51 @@
+---
+# Unified playbook for MariaDB Primary
+# Works for both Docker testing and production VMs
+#
+# Usage:
+#   Docker:      ansible-playbook -i inventory/hosts-docker-test.yml playbooks/mariadb-primary.yml
+#   Production:  ansible-playbook playbooks/mariadb-primary.yml
+#
+# This targets all hosts in the 'mariadb' group that have 'primary' in their name
+
+- name: Configure MariaDB Primary Server
+  hosts: mariadb:&*primary*
+  become: yes
+
+  roles:
+    - common           # Install base packages, create testuser
+    - mariadb-primary  # Install and configure MariaDB
+
+  tasks:
+    - name: Verify MariaDB is running
+      service:
+        name: mariadb
+        state: started
+      tags: verify
+      ignore_errors: yes  # May not work in Docker without systemd
+
+    - name: Test MySQL connection
+      command: mysql -u app_user -papp_password voip_db -e "SELECT VERSION();"
+      register: mysql_version
+      changed_when: false
+      failed_when: false
+      tags: verify
+
+    - name: Show MySQL version
+      debug:
+        var: mysql_version.stdout_lines
+      when: mysql_version.rc == 0
+      tags: verify
+
+    - name: Show master status
+      command: mysql -u root -e "SHOW MASTER STATUS;"
+      register: master_status
+      changed_when: false
+      failed_when: false
+      tags: verify
+
+    - name: Display master status
+      debug:
+        var: master_status.stdout_lines
+      when: master_status.rc == 0
+      tags: verify

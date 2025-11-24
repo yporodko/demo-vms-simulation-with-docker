@@ -1,0 +1,98 @@
+# Nginx Main Configuration - Managed by Ansible
+# Optimized for high traffic and DDoS protection
+
+user www-data;
+worker_processes {{ nginx_worker_processes }};
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+# Increase worker file descriptors for high traffic
+worker_rlimit_nofile 65535;
+
+events {
+    worker_connections {{ nginx_worker_connections }};
+    multi_accept {{ nginx_multi_accept }};
+    use epoll;
+}
+
+http {
+    ##
+    # Basic Settings
+    ##
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    types_hash_max_size 2048;
+    server_tokens off;  # Hide Nginx version for security
+
+    # Buffer size optimizations
+    client_body_buffer_size {{ nginx_client_body_buffer_size }};
+    client_max_body_size {{ nginx_client_max_body_size }};
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    ##
+    # Timeout Settings
+    ##
+    keepalive_timeout {{ nginx_keepalive_timeout }};
+    client_body_timeout {{ nginx_client_body_timeout }};
+    client_header_timeout {{ nginx_client_header_timeout }};
+    send_timeout {{ nginx_send_timeout }};
+
+    ##
+    # DDoS Protection - Rate Limiting Zones
+    ##
+    # Limit requests per IP address
+    limit_req_zone $binary_remote_addr zone=req_limit_per_ip:{{ nginx_limit_req_zone_size }} rate={{ ddos_rate_limit }};
+
+    # Limit connections per IP address
+    limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:{{ nginx_limit_conn_zone_size }};
+
+    # Total connection limit zone
+    limit_conn_zone $server_name zone=conn_limit_total:{{ nginx_limit_conn_zone_size }};
+
+    ##
+    # Logging Settings
+    ##
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_forwarded_for" '
+                    'rt=$request_time uct="$upstream_connect_time" '
+                    'uht="$upstream_header_time" urt="$upstream_response_time"';
+
+    access_log /var/log/nginx/access.log main;
+    error_log /var/log/nginx/error.log warn;
+
+    ##
+    # Gzip Settings
+    ##
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml application/json application/javascript application/xml;
+
+    ##
+    # Upstream Backend Servers
+    ##
+    upstream {{ nginx_upstream_name }} {
+{% if nginx_balance_method == 'least_conn' %}
+        least_conn;
+{% elif nginx_balance_method == 'ip_hash' %}
+        ip_hash;
+{% endif %}
+
+{% for server in nginx_backend_servers %}
+        server {{ server.address }}:{{ server.port }} weight={{ server.weight }};
+{% endfor %}
+
+        keepalive 32;
+    }
+
+    ##
+    # Virtual Host Configs
+    ##
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}

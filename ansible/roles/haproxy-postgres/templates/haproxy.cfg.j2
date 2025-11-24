@@ -1,0 +1,63 @@
+# HAProxy Configuration for PostgreSQL Load Balancing
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+    # Default SSL material locations
+    ca-base /etc/ssl/certs
+    crt-base /etc/ssl/private
+
+    # Security hardening
+    ssl-default-bind-ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+    ssl-default-bind-ciphersuites TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256
+    ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+
+defaults
+    log     global
+    mode    tcp
+    option  tcplog
+    option  dontlognull
+    timeout connect 5000ms
+    timeout client  50000ms
+    timeout server  50000ms
+    errorfile 400 /etc/haproxy/errors/400.http
+    errorfile 403 /etc/haproxy/errors/403.http
+    errorfile 408 /etc/haproxy/errors/408.http
+    errorfile 500 /etc/haproxy/errors/500.http
+    errorfile 502 /etc/haproxy/errors/502.http
+    errorfile 503 /etc/haproxy/errors/503.http
+    errorfile 504 /etc/haproxy/errors/504.http
+
+# HAProxy Statistics Page
+listen stats
+    bind *:{{ haproxy_stats_port }}
+    mode http
+    stats enable
+    stats uri /
+    stats refresh 10s
+    stats auth {{ haproxy_stats_user }}:{{ haproxy_stats_password }}
+    stats admin if TRUE
+
+# NOTE: Write queries go directly to PostgreSQL on port 5432 (not through HAProxy)
+# PostgreSQL Primary is listening directly on port {{ haproxy_write_port }}
+
+# PostgreSQL Replicas - Read Queries (Port {{ haproxy_read_port }})
+listen postgres_read
+    bind *:{{ haproxy_read_port }}
+    mode tcp
+    option tcplog
+    option tcp-check
+    tcp-check connect
+    balance {{ haproxy_balance_algorithm }}
+
+    # Read queries distributed across replicas
+    server postgres-replica-1 {{ postgres_replica1_host }}:{{ postgres_replica1_port }} check inter {{ haproxy_check_interval }} rise {{ haproxy_check_rise }} fall {{ haproxy_check_fall }}
+    server postgres-replica-2 {{ postgres_replica2_host }}:{{ postgres_replica2_port }} check inter {{ haproxy_check_interval }} rise {{ haproxy_check_rise }} fall {{ haproxy_check_fall }}

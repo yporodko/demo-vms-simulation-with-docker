@@ -1,0 +1,51 @@
+---
+# Nginx Reverse Proxy Configuration Variables
+
+# Nginx settings
+nginx_worker_processes: "auto"
+nginx_worker_connections: 4096
+nginx_multi_accept: "on"
+
+# Proxy settings
+nginx_proxy_port: 80
+nginx_proxy_ssl_port: 443
+
+# Backend servers (will be overridden in inventory)
+nginx_backend_servers:
+  - { name: "app-1", address: "127.0.0.1", port: 8080, weight: 1 }
+  - { name: "app-2", address: "127.0.0.1", port: 8080, weight: 1 }
+
+nginx_backend_port: 8080
+
+# Load balancing settings
+nginx_upstream_name: "backend_servers"
+nginx_balance_method: "least_conn"  # Options: round_robin, least_conn, ip_hash
+
+# Connection limits and timeouts
+nginx_keepalive_timeout: 65
+nginx_client_body_timeout: 60
+nginx_client_header_timeout: 60
+nginx_send_timeout: 60
+nginx_proxy_connect_timeout: 60
+nginx_proxy_send_timeout: 60
+nginx_proxy_read_timeout: 60
+
+# Buffer settings for high traffic
+nginx_client_body_buffer_size: "16k"
+nginx_client_max_body_size: "10m"
+nginx_proxy_buffer_size: "4k"
+nginx_proxy_buffers: "8 16k"
+nginx_proxy_busy_buffers_size: "24k"
+
+# DDoS Protection Settings
+ddos_rate_limit: "10r/s"           # Requests per second per IP
+ddos_rate_limit_burst: 20          # Burst allowance
+ddos_conn_limit_per_ip: 20         # Max simultaneous connections per IP
+ddos_conn_limit_total: 10000       # Total connections limit
+
+# Request limiting zones
+nginx_limit_req_zone_size: "10m"
+nginx_limit_conn_zone_size: "10m"
+
+# Security headers
+nginx_security_headers: true

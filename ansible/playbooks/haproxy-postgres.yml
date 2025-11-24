@@ -1,0 +1,25 @@
+---
+# Unified playbook for HAProxy PostgreSQL Load Balancer
+# Usage:
+#   Docker:      ansible-playbook -i inventory/hosts-docker-test.yml playbooks/haproxy-postgres.yml
+#   Production:  ansible-playbook playbooks/haproxy-postgres.yml
+
+- name: Configure HAProxy for PostgreSQL Load Balancing
+  hosts: postgres:&*primary*  # Install HAProxy on the primary server
+  become: yes
+
+  roles:
+    - haproxy-postgres
+
+  tasks:
+    - name: Display HAProxy stats URL
+      debug:
+        msg: "HAProxy Stats available at http://{{ ansible_host }}:{{ haproxy_stats_port }} (user: {{ haproxy_stats_user }})"
+      tags: verify
+
+    - name: Display connection information
+      debug:
+        msg:
+          - "Write queries (Primary): {{ ansible_host }}:{{ haproxy_write_port }}"
+          - "Read queries (Replicas): {{ ansible_host }}:{{ haproxy_read_port }}"
+      tags: verify

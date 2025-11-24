@@ -1,0 +1,204 @@
+---
+# PostgreSQL Primary Installation and Configuration
+
+- name: Install required packages for adding PostgreSQL repository
+  apt:
+    name:
+      - wget
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+  tags: postgres
+
+- name: Add PostgreSQL APT repository key
+  shell: |
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+  args:
+    creates: /etc/apt/trusted.gpg.d/postgresql.gpg
+  tags: postgres
+
+- name: Add PostgreSQL APT repository
+  apt_repository:
+    repo: "deb http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    state: present
+    filename: pgdg
+  tags: postgres
+
+- name: Update apt cache after adding PostgreSQL repository
+  apt:
+    update_cache: yes
+  tags: postgres
+
+- name: Install PostgreSQL packages
+  apt:
+    name:
+      - postgresql-{{ postgres_version }}
+      - postgresql-client-{{ postgres_version }}
+      - postgresql-contrib-{{ postgres_version }}
+      - python3-psycopg2  # Required for Ansible postgresql modules
+    state: present
+    update_cache: yes
+  tags: postgres
+
+- name: Check if PostgreSQL cluster exists
+  stat:
+    path: /var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION
+  register: pg_cluster_exists
+  tags: postgres
+
+- name: Create PostgreSQL cluster if it doesn't exist
+  command: pg_createcluster {{ postgres_version }} main --start
+  when: not pg_cluster_exists.stat.exists
+  tags: postgres
+
+- name: Ensure PostgreSQL is running
+  service:
+    name: postgresql
+    state: started
+    enabled: yes
+  tags: postgres
+
+- name: Create archive directory
+  file:
+    path: /var/lib/postgresql/{{ postgres_version }}/archive
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+  tags: postgres
+
+- name: Configure PostgreSQL for replication
+  template:
+    src: postgresql.conf.j2
+    dest: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+    owner: postgres
+    group: postgres
+    mode: '0644'
+  notify: restart postgresql
+  tags: postgres_config
+
+- name: Configure PostgreSQL authentication (pg_hba.conf)
+  template:
+    src: pg_hba.conf.j2
+    dest: /etc/postgresql/{{ postgres_version }}/main/pg_hba.conf
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  notify: restart postgresql
+  tags: postgres_config
+
+- name: Check if systemd is available and running
+  shell: systemctl is-system-running 2>/dev/null || echo "not-running"
+  register: systemd_check
+  failed_when: false
+  changed_when: false
+  tags: postgres_config
+
+- name: Create symlinks for config files in data directory (Docker compatibility only)
+  file:
+    src: "/etc/postgresql/{{ postgres_version }}/main/{{ item }}"
+    dest: "/var/lib/postgresql/{{ postgres_version }}/main/{{ item }}"
+    state: link
+    force: yes
+  loop:
+    - postgresql.conf
+    - pg_hba.conf
+  when: "'not-running' in systemd_check.stdout"
+  tags: postgres_config
+
+- name: Ensure PostgreSQL is running after config
+  service:
+    name: postgresql
+    state: started
+  tags: postgres
+
+- name: Wait for PostgreSQL to be ready
+  wait_for:
+    port: "{{ postgres_port }}"
+    timeout: 30
+  tags: postgres
+
+- name: Create replication user
+  postgresql_user:
+    name: "{{ postgres_repl_user }}"
+    password: "{{ postgres_repl_password }}"
+    role_attr_flags: REPLICATION,LOGIN
+    state: present
+  become: yes
+  become_user: postgres
+  tags: postgres_users
+
+- name: Create application database
+  postgresql_db:
+    name: "{{ postgres_database }}"
+    encoding: UTF8
+    state: present
+  become: yes
+  become_user: postgres
+  tags: postgres_database
+
+- name: Create application user
+  postgresql_user:
+    name: "{{ postgres_app_user }}"
+    password: "{{ postgres_app_password }}"
+    state: present
+  become: yes
+  become_user: postgres
+  tags: postgres_users
+
+- name: Grant all privileges on database to app user
+  postgresql_privs:
+    database: "{{ postgres_database }}"
+    roles: "{{ postgres_app_user }}"
+    type: database
+    privs: ALL
+    state: present
+  become: yes
+  become_user: postgres
+  tags: postgres_users
+
+- name: Grant schema privileges to app user
+  postgresql_privs:
+    database: "{{ postgres_database }}"
+    roles: "{{ postgres_app_user }}"
+    objs: ALL_IN_SCHEMA
+    privs: SELECT,INSERT,UPDATE,DELETE
+    type: table
+    schema: public
+    state: present
+  become: yes
+  become_user: postgres
+  tags: postgres_users
+
+- name: Check if initial schema exists
+  postgresql_query:
+    db: "{{ postgres_database }}"
+    query: "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"
+  become: yes
+  become_user: postgres
+  register: table_count
+  tags: postgres_schema
+
+- name: Create initial schema if needed
+  postgresql_query:
+    db: "{{ postgres_database }}"
+    query: |
+      CREATE TABLE IF NOT EXISTS products (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          price DECIMAL(10, 2) NOT NULL,
+          stock INT DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS orders (
+          id SERIAL PRIMARY KEY,
+          product_id INT REFERENCES products(id),
+          quantity INT NOT NULL,
+          total DECIMAL(10, 2) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+  become: yes
+  become_user: postgres
+  when: table_count.query_result[0].count == '0'
+  tags: postgres_schema

@@ -1,0 +1,25 @@
+---
+# Asterisk Balancer Configuration Variables
+
+# SIP settings
+asterisk_sip_port: 5060
+asterisk_sip_bindaddr: "0.0.0.0"
+
+# Backend Asterisk servers with weights
+# Weight determines traffic distribution (80/20 = 4:1 ratio)
+asterisk_backends:
+  - name: "asterisk-1"
+    host: "{{ hostvars['asterisk-1']['ansible_host'] | default('46.62.200.187') }}"
+    port: 5060
+    weight: 4  # 80%
+  - name: "asterisk-2"
+    host: "{{ hostvars['asterisk-2']['ansible_host'] | default('95.216.205.250') }}"
+    port: 5060
+    weight: 1  # 20%
+
+# RTP port range
+asterisk_rtp_start: 10000
+asterisk_rtp_end: 20000
+
+# Context for balancer
+asterisk_balancer_context: "balancer"

@@ -1,0 +1,42 @@
+# PostgreSQL Primary Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+# Data directory (Debian default)
+data_directory = '/var/lib/postgresql/{{ postgres_version }}/main'
+
+# Connection settings
+listen_addresses = '{{ postgres_listen_addresses }}'
+port = {{ postgres_port }}
+max_connections = {{ postgres_max_connections }}
+
+# Memory settings
+shared_buffers = {{ postgres_shared_buffers }}
+effective_cache_size = {{ postgres_effective_cache_size }}
+work_mem = {{ postgres_work_mem }}
+maintenance_work_mem = {{ postgres_maintenance_work_mem }}
+
+# Write Ahead Log (WAL) settings for replication
+wal_level = replica
+max_wal_senders = {{ postgres_max_wal_senders }}
+wal_keep_segments = {{ postgres_wal_keep_segments }}
+
+# Archive settings
+archive_mode = {{ postgres_archive_mode }}
+archive_command = '{{ postgres_archive_command }}'
+
+# Logging
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_line_prefix = '%m [%p] %u@%d '
+log_timezone = 'UTC'
+
+# Locale settings
+datestyle = 'iso, mdy'
+timezone = 'UTC'
+lc_messages = 'C'
+lc_monetary = 'C'
+lc_numeric = 'C'
+lc_time = 'C'
+default_text_search_config = 'pg_catalog.english'

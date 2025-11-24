@@ -1,0 +1,9 @@
+---
+# Handlers for PostgreSQL Primary
+
+- name: restart postgresql
+  shell: /usr/sbin/service postgresql restart
+  async: 1
+  poll: 0
+  ignore_errors: yes
+  # Note: Async mode and ignore_errors are used for Docker compatibility

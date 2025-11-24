@@ -1,0 +1,12 @@
+---
+# Simple App Handlers
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: restart app
+  service:
+    name: simple-app
+    state: restarted
+  ignore_errors: yes  # Docker without systemd

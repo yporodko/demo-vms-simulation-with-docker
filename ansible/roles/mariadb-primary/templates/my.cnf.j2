@@ -1,0 +1,38 @@
+# MariaDB Configuration Template
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+[mysqld]
+# Server ID for replication (must be unique)
+server_id = {{ mariadb_server_id }}
+
+# Binary log for replication
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_format = ROW
+
+# Primary is NOT read-only (replicas are)
+read_only = {{ mariadb_read_only }}
+
+# Performance tuning for high traffic
+innodb_buffer_pool_size = {{ mariadb_innodb_buffer_pool_size }}
+innodb_log_file_size = {{ mariadb_innodb_log_file_size }}
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+
+# Connection settings
+max_connections = {{ mariadb_max_connections }}
+max_connect_errors = 1000000
+
+# Query cache
+query_cache_type = 1
+query_cache_size = {{ mariadb_query_cache_size }}
+query_cache_limit = 2M
+
+# Network settings
+bind-address = {{ mariadb_bind_address }}
+
+# Character set
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+
+[client]
+default-character-set = utf8mb4

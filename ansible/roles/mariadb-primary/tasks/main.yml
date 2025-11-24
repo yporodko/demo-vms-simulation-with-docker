@@ -1,0 +1,108 @@
+---
+# MariaDB Primary role: Install and configure MariaDB primary server
+# Equivalent to provisioning/maria-primary/install.sh + configure.sh
+
+- name: Install MariaDB server and client
+  apt:
+    name:
+      - mariadb-server
+      - mariadb-client
+      - python3-pymysql  # Required for Ansible mysql modules
+    state: present
+    update_cache: yes
+  tags: mariadb
+
+- name: Create MariaDB log directory
+  file:
+    path: /var/log/mysql
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: '0755'
+  tags: mariadb
+
+- name: Copy MariaDB custom configuration
+  template:
+    src: my.cnf.j2
+    dest: /etc/mysql/mariadb.conf.d/99-custom.cnf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart mariadb
+  tags: mariadb_config
+
+- name: Ensure MariaDB is running and enabled
+  service:
+    name: mariadb
+    state: started
+    enabled: yes
+  tags: mariadb
+
+- name: Wait for MariaDB to be ready
+  wait_for:
+    port: 3306
+    host: localhost
+    timeout: 30
+  tags: mariadb
+
+- name: Create replication user
+  mysql_user:
+    name: "{{ mariadb_repl_user }}"
+    password: "{{ mariadb_repl_password }}"
+    host: "%"
+    priv: "*.*:REPLICATION SLAVE,REPLICATION CLIENT,BINLOG MONITOR"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_users
+
+- name: Create application user for remote connections
+  mysql_user:
+    name: "{{ mariadb_app_user }}"
+    password: "{{ mariadb_app_password }}"
+    host: "%"
+    priv: "*.*:ALL,GRANT"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_users
+
+- name: Create application user for localhost
+  mysql_user:
+    name: "{{ mariadb_app_user }}"
+    password: "{{ mariadb_app_password }}"
+    host: "localhost"
+    priv: "*.*:ALL,GRANT"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_users
+
+- name: Create voip database
+  mysql_db:
+    name: "{{ mariadb_database }}"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_database
+
+- name: Check if voip_db tables exist
+  shell: "mysql -u root {{ mariadb_database }} -e 'SHOW TABLES;' | grep -c calls || echo 0"
+  register: tables_exist
+  changed_when: false
+  tags: mariadb_database
+
+- name: Import initial database schema
+  mysql_db:
+    name: "{{ mariadb_database }}"
+    state: import
+    target: /tmp/voip_db.sql
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  when: tables_exist.stdout == "0"
+  tags: mariadb_database
+
+- name: Copy initial SQL file to server
+  copy:
+    src: voip_db.sql
+    dest: /tmp/voip_db.sql
+    owner: root
+    group: root
+    mode: '0644'
+  when: tables_exist.stdout == "0"
+  tags: mariadb_database

@@ -1,0 +1,66 @@
+; Asterisk Dialplan - Managed by Ansible
+; Call handling with random outcomes:
+; - 12% busy
+; - 33% no answer
+; - 55% answer with tt-monkeys
+
+[general]
+static=yes
+writeprotect=no
+clearglobalvars=no
+
+[globals]
+; Percentages for call outcomes
+BUSY_PERCENT={{ asterisk_busy_percent }}
+NOANSWER_PERCENT={{ asterisk_noanswer_percent }}
+; Ring duration range
+RING_MIN={{ asterisk_ring_min }}
+RING_MAX={{ asterisk_ring_max }}
+; Playback duration range
+PLAYBACK_MIN={{ asterisk_playback_min }}
+PLAYBACK_MAX={{ asterisk_playback_max }}
+
+[{{ asterisk_incoming_context }}]
+; Main incoming call handler
+exten => _X.,1,NoOp(Incoming call to ${EXTEN} from ${CALLERID(num)})
+ same => n,Set(OUTCOME=${RAND(1,100)})
+ same => n,Set(RING_TIME=${RAND(${RING_MIN},${RING_MAX})})
+ same => n,NoOp(Random outcome: ${OUTCOME}, Ring time: ${RING_TIME}s)
+
+ ; Ring for random 10-20 seconds
+ same => n,Ringing()
+ same => n,Wait(${RING_TIME})
+
+ ; Determine outcome based on random number
+ ; 1-12 = busy (12%)
+ same => n,GotoIf($[${OUTCOME} <= ${BUSY_PERCENT}]?busy)
+ ; 13-45 = no answer (33%)
+ same => n,GotoIf($[${OUTCOME} <= $[${BUSY_PERCENT} + ${NOANSWER_PERCENT}]]?noanswer)
+ ; 46-100 = answer (55%)
+ same => n,Goto(answer)
+
+ ; Busy outcome
+ same => n(busy),NoOp(Call outcome: BUSY)
+ same => n,Busy(5)
+ same => n,Hangup()
+
+ ; No answer outcome
+ same => n(noanswer),NoOp(Call outcome: NO ANSWER)
+ same => n,Hangup(18)
+
+ ; Answer and play tt-monkeys
+ same => n(answer),NoOp(Call outcome: ANSWERED)
+ same => n,Answer()
+ same => n,Set(PLAY_TIME=${RAND(${PLAYBACK_MIN},${PLAYBACK_MAX})})
+ same => n,NoOp(Playing {{ asterisk_playback_sound }} for ${PLAY_TIME} seconds)
+ ; Play the sound file in a loop until timeout
+ same => n,Set(END_TIME=$[${EPOCH} + ${PLAY_TIME}])
+ same => n(playloop),Playback({{ asterisk_playback_sound }})
+ same => n,GotoIf($[${EPOCH} < ${END_TIME}]?playloop)
+ same => n,Hangup()
+
+; Catch-all for any extension
+exten => _.,1,Goto({{ asterisk_incoming_context }},s,1)
+
+; Start extension
+exten => s,1,Goto({{ asterisk_incoming_context }},100,1)

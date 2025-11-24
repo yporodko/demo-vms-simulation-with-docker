@@ -1,0 +1,38 @@
+---
+# Unified playbook for COMPONENT Primary
+# Works for both Docker testing and production VMs
+#
+# Usage:
+#   Docker:      ansible-playbook -i inventory/hosts-docker-test.yml playbooks/component-primary.yml
+#   Production:  ansible-playbook playbooks/component-primary.yml
+#
+# This targets all hosts in the 'component' group that have 'primary' in their name
+
+- name: Configure COMPONENT Primary Server
+  hosts: component:&*primary*
+  become: yes
+
+  roles:
+    - common             # Install base packages, create testuser
+    - component-primary  # Install and configure COMPONENT
+
+  tasks:
+    - name: Verify COMPONENT is running
+      service:
+        name: component
+        state: started
+      tags: verify
+      ignore_errors: yes  # May not work in Docker without systemd
+
+    - name: Test COMPONENT connection
+      command: component-cli status  # Replace with actual component CLI command
+      register: component_status
+      changed_when: false
+      failed_when: false
+      tags: verify
+
+    - name: Display COMPONENT status
+      debug:
+        var: component_status.stdout_lines
+      when: component_status.rc == 0
+      tags: verify

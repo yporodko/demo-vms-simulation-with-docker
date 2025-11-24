@@ -1,0 +1,45 @@
+---
+# Test playbook for maria-replica on Docker
+# Usage: ansible-playbook -i inventory/hosts-docker-test.yml playbooks/maria-replica-test.yml
+
+- name: Configure MariaDB Replica Server (Docker Test)
+  hosts: maria-replica-test
+  become: yes
+
+  vars:
+    # Override primary host for Docker network
+    # In Docker, maria-primary-test is accessible at this IP
+    mariadb_primary_host: "172.20.0.10"
+
+  roles:
+    - common           # Install base packages, create testuser
+    - mariadb-replica  # Install and configure MariaDB replica
+
+  tasks:
+    - name: Verify MariaDB is running
+      service:
+        name: mariadb
+        state: started
+      tags: verify
+
+    - name: Test MySQL connection
+      command: mysql -u app_user -papp_password -e "SELECT VERSION();"
+      register: mysql_version
+      changed_when: false
+      tags: verify
+
+    - name: Show MySQL version
+      debug:
+        var: mysql_version.stdout_lines
+      tags: verify
+
+    - name: Check replica status
+      command: mysql -u root -e "SHOW SLAVE STATUS\G"
+      register: slave_status
+      changed_when: false
+      tags: verify
+
+    - name: Display replica status
+      debug:
+        var: slave_status.stdout_lines
+      tags: verify

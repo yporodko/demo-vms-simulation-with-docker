@@ -1,0 +1,89 @@
+---
+# Inventory for local Docker testing
+# Use this with: ansible-playbook -i inventory/hosts-docker-test.yml playbooks/maria-primary.yml
+
+all:
+  vars:
+    ansible_user: root
+    ansible_ssh_private_key_file: ~/.ssh/redi_test_key
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_python_interpreter: /usr/bin/python3
+
+  children:
+    # Task 1: MariaDB Replication
+    mariadb:
+      hosts:
+        maria-primary-test:
+          ansible_host: localhost
+          ansible_port: 2201
+        maria-replica-test:
+          ansible_host: localhost
+          ansible_port: 2202
+          # Override for Docker: primary is accessible at Docker network IP
+          mariadb_primary_host: "172.20.0.10"
+
+    # Task 2: PostgreSQL Replication + Load Balancing
+    postgres:
+      hosts:
+        postgres-primary-test:
+          ansible_host: localhost
+          ansible_port: 2203
+          # HAProxy backend configuration (use Docker network IPs for health checks)
+          postgres_primary_host: "172.20.0.20"
+          postgres_replica1_host: "172.20.0.21"
+          postgres_replica2_host: "172.20.0.22"
+        postgres-replica-1-test:
+          ansible_host: localhost
+          ansible_port: 2204
+          # Override for Docker: primary is accessible at Docker network IP
+          postgres_primary_host: "172.20.0.20"
+        postgres-replica-2-test:
+          ansible_host: localhost
+          ansible_port: 2205
+          # Override for Docker: primary is accessible at Docker network IP
+          postgres_primary_host: "172.20.0.20"
+
+    postgres_balancer:
+      hosts:
+        postgres-balancer-test:
+          ansible_host: localhost
+          ansible_port: 2206
+
+    # Task 3: Nginx Reverse Proxy
+    apps:
+      hosts:
+        app-1-test:
+          ansible_host: localhost
+          ansible_port: 2207
+        app-2-test:
+          ansible_host: localhost
+          ansible_port: 2208
+
+    nginx:
+      hosts:
+        nginx-test:
+          ansible_host: localhost
+          ansible_port: 2209
+
+    # Task 4: Asterisk VoIP
+    asterisk:
+      hosts:
+        asterisk-1-test:
+          ansible_host: localhost
+          ansible_port: 2210
+        asterisk-2-test:
+          ansible_host: localhost
+          ansible_port: 2211
+
+    asterisk_balancer:
+      hosts:
+        asterisk-balancer-test:
+          ansible_host: localhost
+          ansible_port: 2212
+
+    # SIPp Testing
+    sipp:
+      hosts:
+        sipp-test:
+          ansible_host: localhost
+          ansible_port: 2213

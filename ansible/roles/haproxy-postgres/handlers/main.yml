@@ -1,0 +1,10 @@
+---
+# HAProxy Handlers
+
+- name: restart haproxy
+  service:
+    name: haproxy
+    state: restarted
+  ignore_errors: yes  # In Docker without systemd
+  async: 1
+  poll: 0

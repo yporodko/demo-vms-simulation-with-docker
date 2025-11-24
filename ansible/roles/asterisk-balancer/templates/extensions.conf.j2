@@ -1,0 +1,58 @@
+; Asterisk Load Balancer Dialplan - Managed by Ansible
+; Distributes calls: 80% to asterisk-1, 20% to asterisk-2
+; Using weighted random selection (weight 4:1 = 80:20)
+
+[general]
+static=yes
+writeprotect=no
+clearglobalvars=no
+
+[globals]
+; Total weight for distribution calculation
+TOTAL_WEIGHT=5
+
+[{{ asterisk_balancer_context }}]
+; Main entry point for incoming calls
+exten => _X.,1,NoOp(Load Balancer: Incoming call to ${EXTEN} from ${CALLERID(num)})
+ same => n,Set(WEIGHT_ROLL=${RAND(1,${TOTAL_WEIGHT})})
+ same => n,NoOp(Weight roll: ${WEIGHT_ROLL} (1-4=asterisk-1, 5=asterisk-2))
+
+ ; Weight distribution: 1-4 = asterisk-1 (80%), 5 = asterisk-2 (20%)
+ same => n,GotoIf($[${WEIGHT_ROLL} <= 4]?route_ast1:route_ast2)
+
+ ; Route to asterisk-1 (80%)
+ same => n(route_ast1),NoOp(Routing to asterisk-1)
+ same => n,Set(BACKEND=asterisk-1)
+ same => n,Set(BACKEND_HOST={{ asterisk_backends[0].host }})
+ same => n,Goto(dial_backend,1)
+
+ ; Route to asterisk-2 (20%)
+ same => n(route_ast2),NoOp(Routing to asterisk-2)
+ same => n,Set(BACKEND=asterisk-2)
+ same => n,Set(BACKEND_HOST={{ asterisk_backends[1].host }})
+ same => n,Goto(dial_backend,1)
+
+ ; Dial the selected backend
+ same => n(dial_backend),NoOp(Dialing backend ${BACKEND} at ${BACKEND_HOST})
+ same => n,Dial(PJSIP/${EXTEN}@${BACKEND},60,g)
+ same => n,NoOp(Dial result: ${DIALSTATUS})
+ same => n,Hangup()
+
+; Catch-all
+exten => _.,1,Goto({{ asterisk_balancer_context }},s,1)
+
+; Default start extension
+exten => s,1,NoOp(Load Balancer: Call to default extension)
+ same => n,Set(WEIGHT_ROLL=${RAND(1,${TOTAL_WEIGHT})})
+ same => n,GotoIf($[${WEIGHT_ROLL} <= 4]?route_ast1:route_ast2)
+ same => n(route_ast1),Dial(PJSIP/s@asterisk-1,60,g)
+ same => n,Hangup()
+ same => n(route_ast2),Dial(PJSIP/s@asterisk-2,60,g)
+ same => n,Hangup()
+
+{% for backend in asterisk_backends %}
+; Context for responses from {{ backend.name }}
+[from-{{ backend.name }}]
+exten => _X.,1,NoOp(Response from {{ backend.name }})
+ same => n,Hangup()
+{% endfor %}

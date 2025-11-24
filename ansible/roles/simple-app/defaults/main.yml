@@ -1,0 +1,11 @@
+---
+# Simple App Configuration Variables
+
+# Application settings
+app_name: "simple-web-app"
+app_port: 8080
+app_user: "www-data"
+app_group: "www-data"
+
+# Application directory
+app_dir: "/var/www/app"

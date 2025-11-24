@@ -1,0 +1,53 @@
+; PJSIP Configuration - Managed by Ansible
+; Asterisk Load Balancer
+
+[global]
+type=global
+user_agent=Asterisk Load Balancer
+
+[transport-udp]
+type=transport
+protocol=udp
+bind={{ asterisk_sip_bindaddr }}:{{ asterisk_sip_port }}
+
+; Anonymous endpoint for incoming calls
+[anonymous]
+type=endpoint
+context={{ asterisk_balancer_context }}
+disallow=all
+allow=ulaw
+allow=alaw
+allow=gsm
+direct_media=no
+trust_id_inbound=yes
+
+{% for backend in asterisk_backends %}
+; Backend: {{ backend.name }}
+[{{ backend.name }}]
+type=endpoint
+context=from-{{ backend.name }}
+disallow=all
+allow=ulaw
+allow=alaw
+allow=gsm
+direct_media=no
+outbound_auth={{ backend.name }}-auth
+aors={{ backend.name }}
+
+[{{ backend.name }}-auth]
+type=auth
+auth_type=userpass
+username={{ backend.name }}
+password={{ backend.name }}pass
+
+[{{ backend.name }}]
+type=aor
+contact=sip:{{ backend.host }}:{{ backend.port }}
+qualify_frequency=30
+
+[{{ backend.name }}-identify]
+type=identify
+endpoint={{ backend.name }}
+match={{ backend.host }}
+
+{% endfor %}

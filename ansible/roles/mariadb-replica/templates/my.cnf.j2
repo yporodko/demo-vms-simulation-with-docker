@@ -1,0 +1,44 @@
+# MariaDB Replica Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+
+[mysqld]
+# Server identification
+server_id = {{ mariadb_server_id }}
+
+# Binary logging (replicas should also log for potential cascading replication)
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_format = ROW
+expire_logs_days = 7
+max_binlog_size = 100M
+
+# Relay logs (for replication)
+relay_log = {{ mariadb_relay_log }}
+relay_log_index = {{ mariadb_relay_log_index }}
+relay_log_recovery = 1
+
+# Read-only mode (prevent writes on replica)
+read_only = {{ mariadb_read_only }}
+
+# Parallel replication
+slave_parallel_threads = {{ mariadb_slave_parallel_threads }}
+slave_parallel_mode = {{ mariadb_slave_parallel_mode }}
+
+# Performance tuning
+innodb_buffer_pool_size = {{ mariadb_innodb_buffer_pool_size }}
+max_connections = {{ mariadb_max_connections }}
+
+# Network
+bind-address = {{ mariadb_bind_address }}
+
+# Character set
+character-set-server = utf8mb4
+collation-server = utf8mb4_general_ci
+
+# Logging
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+
+[client]
+default-character-set = utf8mb4

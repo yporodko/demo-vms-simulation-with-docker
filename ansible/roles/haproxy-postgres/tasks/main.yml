@@ -1,0 +1,55 @@
+---
+# HAProxy Installation and Configuration for PostgreSQL Load Balancing
+
+- name: Install HAProxy
+  apt:
+    name:
+      - haproxy
+      - socat  # For HAProxy socket management
+    state: present
+    update_cache: yes
+  tags: haproxy
+
+- name: Ensure HAProxy is enabled and started
+  service:
+    name: haproxy
+    enabled: yes
+    state: started
+  ignore_errors: yes  # In Docker without systemd
+  tags: haproxy
+
+- name: Create HAProxy configuration
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'haproxy -c -f %s'
+  notify: restart haproxy
+  tags: haproxy_config
+
+- name: Ensure HAProxy stats socket directory exists
+  file:
+    path: /run/haproxy
+    state: directory
+    owner: haproxy
+    group: haproxy
+    mode: '0755'
+  tags: haproxy
+
+- name: Check if HAProxy is listening on stats port
+  wait_for:
+    port: "{{ haproxy_stats_port }}"
+    timeout: 5
+  ignore_errors: yes
+  register: haproxy_stats_check
+  tags: verify
+
+- name: Check if HAProxy is listening on read port
+  wait_for:
+    port: "{{ haproxy_read_port }}"
+    timeout: 5
+  ignore_errors: yes
+  register: haproxy_read_check
+  tags: verify

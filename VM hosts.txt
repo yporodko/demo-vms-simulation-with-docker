@@ -1,0 +1,12 @@
+maria-replica 37.27.248.240
+maria-primary 157.180.114.52
+asterisk-1 46.62.200.187
+app-1 37.27.203.40
+postgres-primary 46.62.207.138
+postgres-replica-2 65.21.148.130
+postgres-replica-1 37.27.255.157
+asterisk-balancer 37.27.35.37
+openvpn 77.42.24.220
+app-2 46.62.196.149
+asterisk-2 95.216.205.250
+nginx 157.180.118.98

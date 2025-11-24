@@ -1,0 +1,21 @@
+---
+# COMPONENT Primary Configuration Variables
+# These can be overridden in playbooks or inventory
+
+component_version: "1.0"
+component_server_id: 1  # Must be unique across all instances
+
+# Network settings
+component_bind_address: "0.0.0.0"
+component_port: 5432                    # Replace with your component's port
+
+# Application access
+component_app_user: "app_user"
+component_app_password: "app_password"
+component_database: "app_db"            # If applicable
+
+# Performance settings
+component_max_connections: 100
+component_memory_size: "1G"
+
+# Add component-specific variables here

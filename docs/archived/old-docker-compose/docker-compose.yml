@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # Task 1: MariaDB Primary/Replica
+  maria-primary:
+    build: ./maria-primary
+    container_name: maria-primary
+    hostname: maria-primary
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.10
+    ports:
+      - "3306:3306"
+      - "2201:22"
+    volumes:
+      - ./maria-primary/data:/var/lib/mysql
+      - ./maria-primary/config/my.cnf:/etc/mysql/mariadb.conf.d/50-server.cnf:ro
+      - ./maria-primary/init:/docker-init:ro
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+    restart: unless-stopped
+
+  maria-replica:
+    build: ./maria-replica
+    container_name: maria-replica
+    hostname: maria-replica
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.11
+    ports:
+      - "3307:3306"
+      - "2202:22"
+    volumes:
+      - ./maria-replica/data:/var/lib/mysql
+      - ./maria-replica/config/my.cnf:/etc/mysql/mariadb.conf.d/50-server.cnf:ro
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+    depends_on:
+      - maria-primary
+    restart: unless-stopped
+
+  # Task 2: PostgreSQL Primary + Replicas + Load Balancer
+  postgres-primary:
+    build: ./postgres-primary
+    container_name: postgres-primary
+    hostname: postgres-primary
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.20
+    ports:
+      - "5432:5432"
+      - "2203:22"
+    volumes:
+      - ./postgres-primary/data:/var/lib/postgresql/9.6/main
+      - ./postgres-primary/config:/config:ro
+    restart: unless-stopped
+
+  postgres-replica-1:
+    build: ./postgres-replica-1
+    container_name: postgres-replica-1
+    hostname: postgres-replica-1
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.21
+    ports:
+      - "5433:5432"
+      - "2204:22"
+    volumes:
+      - ./postgres-replica-1/data:/var/lib/postgresql/9.6/main
+      - ./postgres-replica-1/config:/config:ro
+    depends_on:
+      - postgres-primary
+    restart: unless-stopped
+
+  postgres-replica-2:
+    build: ./postgres-replica-2
+    container_name: postgres-replica-2
+    hostname: postgres-replica-2
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.22
+    ports:
+      - "5434:5432"
+      - "2205:22"
+    volumes:
+      - ./postgres-replica-2/data:/var/lib/postgresql/9.6/main
+      - ./postgres-replica-2/config:/config:ro
+    depends_on:
+      - postgres-primary
+    restart: unless-stopped
+
+  postgres-balancer:
+    build: ./postgres-balancer
+    container_name: postgres-balancer
+    hostname: postgres-balancer
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.23
+    ports:
+      - "5435:5433"  # Load balanced read queries on port 5433
+      - "5436:5432"  # Write queries (primary) on port 5432
+      - "8404:8404"  # HAProxy stats page
+      - "2206:22"
+    volumes:
+      - ./postgres-balancer/config:/config:ro
+    depends_on:
+      - postgres-replica-1
+      - postgres-replica-2
+    restart: unless-stopped
+
+  # Task 3: Nginx Reverse Proxy + App Servers
+  app-1:
+    build: ./app-1
+    container_name: app-1
+    hostname: app-1
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.30
+    ports:
+      - "2207:22"
+    restart: unless-stopped
+
+  app-2:
+    build: ./app-2
+    container_name: app-2
+    hostname: app-2
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.31
+    ports:
+      - "2208:22"
+    restart: unless-stopped
+
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    hostname: nginx
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.32
+    ports:
+      - "8000:8000"
+      - "2209:22"
+    volumes:
+      - ./nginx/config:/config:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - app-1
+      - app-2
+    restart: unless-stopped
+
+  # Task 4: Asterisk Servers + Load Balancer
+  asterisk-1:
+    build: ./asterisk-1
+    container_name: asterisk-1
+    hostname: asterisk-1
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.40
+    ports:
+      - "5061:5060/udp"
+      - "5061:5060/tcp"
+      - "2210:22"
+    volumes:
+      - ./asterisk-1/config:/config:ro
+    restart: unless-stopped
+
+  asterisk-2:
+    build: ./asterisk-2
+    container_name: asterisk-2
+    hostname: asterisk-2
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.41
+    ports:
+      - "5062:5060/udp"
+      - "5062:5060/tcp"
+      - "2211:22"
+    volumes:
+      - ./asterisk-2/config:/config:ro
+    restart: unless-stopped
+
+  asterisk-balancer:
+    build: ./asterisk-balancer
+    container_name: asterisk-balancer
+    hostname: asterisk-balancer
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.42
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "2212:22"
+    volumes:
+      - ./asterisk-balancer/config:/config:ro
+      - ./asterisk-balancer/data:/var/lib/opensips
+    depends_on:
+      - asterisk-1
+      - asterisk-2
+    restart: unless-stopped
+
+  # SIPp testing tool
+  sipp:
+    build: ./sipp
+    container_name: sipp
+    hostname: sipp
+    networks:
+      testnet:
+        ipv4_address: 172.20.0.50
+    ports:
+      - "2213:22"
+    volumes:
+      - ./sipp/scenarios:/scenarios:ro
+    restart: unless-stopped
+
+networks:
+  testnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

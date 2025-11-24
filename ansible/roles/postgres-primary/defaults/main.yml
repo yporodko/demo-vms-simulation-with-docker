@@ -1,0 +1,31 @@
+---
+# PostgreSQL Primary Configuration Variables
+# These can be overridden in playbooks or inventory
+
+postgres_version: "9.6"
+
+# Replication settings
+postgres_repl_user: "replicator"
+postgres_repl_password: "repl_password"
+postgres_max_wal_senders: 10
+postgres_wal_keep_segments: 64  # PostgreSQL 9.6 uses segments, not size (each segment is 16MB)
+
+# Application access
+postgres_app_user: "app_user"
+postgres_app_password: "app_password"
+postgres_database: "ecommerce"
+
+# Performance settings
+postgres_max_connections: 200
+postgres_shared_buffers: "256MB"
+postgres_effective_cache_size: "1GB"
+postgres_work_mem: "4MB"
+postgres_maintenance_work_mem: "64MB"
+
+# Network settings
+postgres_listen_addresses: "*"
+postgres_port: 5432
+
+# Archive settings (for point-in-time recovery)
+postgres_archive_mode: "on"
+postgres_archive_command: "test ! -f /var/lib/postgresql/9.6/archive/%f && cp %p /var/lib/postgresql/9.6/archive/%f"

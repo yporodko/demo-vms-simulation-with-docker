@@ -1,0 +1,8 @@
+---
+# Handlers for mariadb-primary role
+
+- name: restart mariadb
+  shell: /usr/sbin/service mariadb restart
+  async: 1
+  poll: 0
+  ignore_errors: yes

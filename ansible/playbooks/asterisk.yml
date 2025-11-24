@@ -1,0 +1,17 @@
+---
+# Asterisk VoIP Deployment
+# Deploys Asterisk backend servers and load balancer
+
+- name: Deploy Asterisk Backend Servers
+  hosts: asterisk-1,asterisk-2
+  become: yes
+  roles:
+    - asterisk
+  tags: backends
+
+- name: Deploy Asterisk Load Balancer
+  hosts: asterisk-balancer
+  become: yes
+  roles:
+    - asterisk-balancer
+  tags: balancer

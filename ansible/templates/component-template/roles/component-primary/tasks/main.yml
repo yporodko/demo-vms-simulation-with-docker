@@ -1,0 +1,52 @@
+---
+# COMPONENT Primary Installation and Configuration
+# Replace COMPONENT with your component name (e.g., PostgreSQL, Nginx, etc.)
+
+- name: Install COMPONENT packages
+  apt:
+    name:
+      - component-package        # Replace with actual package name
+      - component-client         # Replace with actual package name
+      - python3-component-lib    # Replace if needed for Ansible modules
+    state: present
+    update_cache: yes
+  tags: component
+
+- name: Create COMPONENT configuration directory
+  file:
+    path: /etc/component
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: component
+
+- name: Copy COMPONENT configuration
+  template:
+    src: component.conf.j2
+    dest: /etc/component/component.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart component
+  tags: component_config
+
+- name: Ensure COMPONENT is running and enabled
+  service:
+    name: component
+    state: started
+    enabled: yes
+  tags: component
+
+- name: Wait for COMPONENT to be ready
+  wait_for:
+    port: 5432                    # Replace with your component's port
+    timeout: 30
+  tags: component
+
+# Add component-specific tasks here
+# Examples:
+# - Create users
+# - Create databases
+# - Import initial data
+# - Configure replication

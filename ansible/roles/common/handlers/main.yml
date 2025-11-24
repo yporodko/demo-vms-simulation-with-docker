@@ -1,0 +1,10 @@
+---
+# Handlers: Actions triggered by tasks (only run if something changed)
+
+- name: restart ssh
+  service:
+    name: ssh
+    state: restarted
+  async: 1
+  poll: 0
+  ignore_errors: yes

@@ -1,0 +1,17 @@
+---
+# Nginx Reverse Proxy with Load Balancing Deployment
+# Deploys simple app to backend servers and Nginx reverse proxy
+
+- name: Deploy Simple App to Backend Servers
+  hosts: app-1,app-2
+  become: yes
+  roles:
+    - simple-app
+  tags: app
+
+- name: Deploy Nginx Reverse Proxy
+  hosts: nginx
+  become: yes
+  roles:
+    - nginx-proxy
+  tags: nginx

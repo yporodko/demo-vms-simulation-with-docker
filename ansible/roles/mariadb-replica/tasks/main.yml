@@ -1,0 +1,141 @@
+---
+# MariaDB Replica Installation and Configuration
+# This role sets up a MariaDB replica server
+
+- name: Install MariaDB server and client
+  apt:
+    name:
+      - mariadb-server
+      - mariadb-client
+      - python3-pymysql  # Required for Ansible mysql modules
+    state: present
+    update_cache: yes
+  tags: mariadb
+
+- name: Create MariaDB log directory
+  file:
+    path: /var/log/mysql
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: '0755'
+  tags: mariadb
+
+- name: Copy MariaDB custom configuration for replica
+  template:
+    src: my.cnf.j2
+    dest: /etc/mysql/mariadb.conf.d/99-custom.cnf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart mariadb
+  tags: mariadb_config
+
+- name: Ensure MariaDB is running and enabled
+  service:
+    name: mariadb
+    state: started
+    enabled: yes
+  tags: mariadb
+
+- name: Wait for MariaDB to be ready
+  wait_for:
+    port: 3306
+    timeout: 30
+  tags: mariadb
+
+- name: Create application user for remote connections
+  mysql_user:
+    name: "{{ mariadb_app_user }}"
+    password: "{{ mariadb_app_password }}"
+    host: "%"
+    priv: "*.*:SELECT,SHOW VIEW,PROCESS,REPLICATION CLIENT"  # Read-only privileges for replica
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_users
+
+- name: Create application user for localhost
+  mysql_user:
+    name: "{{ mariadb_app_user }}"
+    password: "{{ mariadb_app_password }}"
+    host: "localhost"
+    priv: "*.*:SELECT,SHOW VIEW,PROCESS,REPLICATION CLIENT"  # Read-only privileges for replica
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_users
+
+- name: Create database (must exist before replication)
+  mysql_db:
+    name: "{{ mariadb_database }}"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_database
+
+- name: Get primary server status
+  mysql_replication:
+    mode: getprimary
+    login_host: "{{ mariadb_primary_host }}"
+    login_user: "{{ mariadb_repl_user }}"
+    login_password: "{{ mariadb_repl_password }}"
+  register: primary_status
+  tags:
+    - mariadb_replication
+
+- name: Display primary server status
+  debug:
+    var: primary_status
+  tags: mariadb_replication
+
+- name: Stop replica if running
+  mysql_replication:
+    mode: stopreplica
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  ignore_errors: yes
+  tags: mariadb_replication
+
+- name: Configure replication
+  mysql_replication:
+    mode: changeprimary
+    primary_host: "{{ mariadb_primary_host }}"
+    primary_user: "{{ mariadb_repl_user }}"
+    primary_password: "{{ mariadb_repl_password }}"
+    primary_log_file: "{{ primary_status.File }}"
+    primary_log_pos: "{{ primary_status.Position }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_replication
+
+- name: Start replica
+  mysql_replication:
+    mode: startreplica
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  tags: mariadb_replication
+
+- name: Wait for replica to sync
+  pause:
+    seconds: 5
+  tags: mariadb_replication
+
+- name: Check replica status
+  mysql_replication:
+    mode: getreplica
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+  register: replica_status
+  tags: mariadb_replication
+
+- name: Display replica status
+  debug:
+    msg:
+      - "Replica IO Running: {{ replica_status.Slave_IO_Running }}"
+      - "Replica SQL Running: {{ replica_status.Slave_SQL_Running }}"
+      - "Seconds Behind Primary: {{ replica_status.Seconds_Behind_Master }}"
+      - "Last Error: {{ replica_status.Last_Error | default('None') }}"
+  tags: mariadb_replication
+
+- name: Verify replication is working
+  assert:
+    that:
+      - replica_status.Slave_IO_Running == "Yes"
+      - replica_status.Slave_SQL_Running == "Yes"
+    fail_msg: "Replication is not running properly. Check replica_status for details."
+    success_msg: "Replication is running successfully!"
+  tags: mariadb_replication

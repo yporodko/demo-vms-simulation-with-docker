@@ -1,0 +1,29 @@
+---
+# Asterisk Configuration Variables
+
+# SIP settings
+asterisk_sip_port: 5060
+asterisk_sip_bindaddr: "0.0.0.0"
+
+# Call behavior percentages (must sum to 100)
+asterisk_busy_percent: 12
+asterisk_noanswer_percent: 33
+# Remaining (55%) will be answered
+
+# Ring duration before response (seconds)
+asterisk_ring_min: 10
+asterisk_ring_max: 20
+
+# Answer playback duration (seconds)
+asterisk_playback_min: 15
+asterisk_playback_max: 45
+
+# Sound file to play on answer
+asterisk_playback_sound: "tt-monkeys"
+
+# Context names
+asterisk_incoming_context: "incoming"
+
+# RTP port range
+asterisk_rtp_start: 10000
+asterisk_rtp_end: 20000

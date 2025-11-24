@@ -1,0 +1,76 @@
+---
+# Asterisk Installation and Configuration
+
+- name: Add Debian Bullseye repository for Asterisk
+  copy:
+    content: "deb http://deb.debian.org/debian bullseye main\n"
+    dest: /etc/apt/sources.list.d/bullseye.list
+    mode: '0644'
+  tags: asterisk
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  tags: asterisk
+
+- name: Install Asterisk and dependencies from Bullseye
+  apt:
+    name:
+      - asterisk
+      - asterisk-core-sounds-en
+      - asterisk-core-sounds-en-wav
+      - asterisk-core-sounds-en-gsm
+    state: present
+    default_release: bullseye
+  tags: asterisk
+
+- name: Stop Asterisk before configuration
+  service:
+    name: asterisk
+    state: stopped
+  tags: asterisk
+
+- name: Deploy pjsip.conf (SIP configuration)
+  template:
+    src: pjsip.conf.j2
+    dest: /etc/asterisk/pjsip.conf
+    owner: asterisk
+    group: asterisk
+    mode: '0640'
+  notify: restart asterisk
+  tags: asterisk
+
+- name: Deploy extensions.conf (dialplan)
+  template:
+    src: extensions.conf.j2
+    dest: /etc/asterisk/extensions.conf
+    owner: asterisk
+    group: asterisk
+    mode: '0640'
+  notify: restart asterisk
+  tags: asterisk
+
+- name: Deploy rtp.conf
+  template:
+    src: rtp.conf.j2
+    dest: /etc/asterisk/rtp.conf
+    owner: asterisk
+    group: asterisk
+    mode: '0640'
+  notify: restart asterisk
+  tags: asterisk
+
+- name: Ensure Asterisk is running and enabled
+  service:
+    name: asterisk
+    state: started
+    enabled: yes
+  tags: asterisk
+
+- name: Wait for Asterisk to be ready
+  shell: asterisk -rx 'core show version' 2>/dev/null | grep -q 'Asterisk'
+  register: asterisk_ready
+  until: asterisk_ready.rc == 0
+  retries: 10
+  delay: 3
+  tags: verify

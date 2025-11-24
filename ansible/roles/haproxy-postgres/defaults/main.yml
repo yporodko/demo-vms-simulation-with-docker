@@ -1,0 +1,35 @@
+---
+# HAProxy for PostgreSQL Load Balancing Configuration Variables
+
+# HAProxy version
+haproxy_version: "2.8"
+
+# PostgreSQL backend servers
+postgres_primary_host: "postgres-primary"
+postgres_primary_port: 5432
+postgres_replica1_host: "postgres-replica-1"
+postgres_replica1_port: 5432
+postgres_replica2_host: "postgres-replica-2"
+postgres_replica2_port: 5432
+
+# HAProxy listening ports
+haproxy_write_port: 5432      # Write queries go directly to primary
+haproxy_read_port: 5433       # Read queries distributed across replicas
+haproxy_stats_port: 8404      # HAProxy statistics page
+
+# HAProxy stats authentication
+haproxy_stats_user: "admin"
+haproxy_stats_password: "admin_password"
+
+# PostgreSQL health check user (should have login privileges)
+postgres_check_user: "replicator"
+postgres_check_password: "repl_password"
+
+# Load balancing algorithm for read queries
+haproxy_balance_algorithm: "roundrobin"  # Options: roundrobin, leastconn, source
+
+# Health check settings
+haproxy_check_interval: "3s"
+haproxy_check_timeout: "2s"
+haproxy_check_rise: 2
+haproxy_check_fall: 3

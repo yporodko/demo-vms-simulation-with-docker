@@ -1,0 +1,13 @@
+---
+# Complete MariaDB replication setup (Primary + Replica)
+# Works for both Docker testing and production VMs
+#
+# Usage:
+#   Docker:      ansible-playbook -i inventory/hosts-docker-test.yml playbooks/mariadb.yml
+#   Production:  ansible-playbook playbooks/mariadb.yml
+
+- name: Deploy MariaDB Primary
+  import_playbook: mariadb-primary.yml
+
+- name: Deploy MariaDB Replica
+  import_playbook: mariadb-replica.yml

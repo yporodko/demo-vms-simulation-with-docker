@@ -1,0 +1,211 @@
+---
+# Nginx with Local Apps for Testing
+# Deploys 2 app instances on the same host as Nginx
+
+- name: Deploy Nginx with Local App Instances
+  hosts: nginx
+  become: yes
+  vars:
+    # Override backend servers to use localhost with different ports
+    nginx_backend_servers:
+      - { name: "app-1", address: "127.0.0.1", port: 8081, weight: 1 }
+      - { name: "app-2", address: "127.0.0.1", port: 8082, weight: 1 }
+  tasks:
+    # Install Python for the apps
+    - name: Install required packages
+      apt:
+        name:
+          - python3
+        state: present
+        update_cache: yes
+
+    # Create app directories
+    - name: Create app-1 directory
+      file:
+        path: /var/www/app1
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Create app-2 directory
+      file:
+        path: /var/www/app2
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    # Deploy app-1
+    - name: Deploy app-1 Python application
+      copy:
+        dest: /var/www/app1/app.py
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        content: |
+          #!/usr/bin/env python3
+          import http.server
+          import socketserver
+          import socket
+          import json
+          from datetime import datetime
+
+          PORT = 8081
+          INSTANCE = "app-1"
+
+          class AppHandler(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  hostname = socket.gethostname()
+                  response_data = {
+                      "status": "ok",
+                      "instance": INSTANCE,
+                      "hostname": hostname,
+                      "port": PORT,
+                      "path": self.path,
+                      "timestamp": datetime.now().isoformat(),
+                  }
+                  if self.path == "/health":
+                      self.send_response(200)
+                      self.send_header("Content-Type", "application/json")
+                      self.end_headers()
+                      self.wfile.write(json.dumps({"status": "healthy", "instance": INSTANCE}).encode())
+                      return
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("X-Backend-Server", INSTANCE)
+                  self.end_headers()
+                  self.wfile.write(json.dumps(response_data, indent=2).encode())
+
+              def log_message(self, format, *args):
+                  print(f"[{datetime.now().isoformat()}] {INSTANCE} - {format % args}")
+
+          if __name__ == "__main__":
+              with socketserver.TCPServer(("127.0.0.1", PORT), AppHandler) as httpd:
+                  print(f"{INSTANCE} running on port {PORT}")
+                  httpd.serve_forever()
+
+    # Deploy app-2
+    - name: Deploy app-2 Python application
+      copy:
+        dest: /var/www/app2/app.py
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        content: |
+          #!/usr/bin/env python3
+          import http.server
+          import socketserver
+          import socket
+          import json
+          from datetime import datetime
+
+          PORT = 8082
+          INSTANCE = "app-2"
+
+          class AppHandler(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  hostname = socket.gethostname()
+                  response_data = {
+                      "status": "ok",
+                      "instance": INSTANCE,
+                      "hostname": hostname,
+                      "port": PORT,
+                      "path": self.path,
+                      "timestamp": datetime.now().isoformat(),
+                  }
+                  if self.path == "/health":
+                      self.send_response(200)
+                      self.send_header("Content-Type", "application/json")
+                      self.end_headers()
+                      self.wfile.write(json.dumps({"status": "healthy", "instance": INSTANCE}).encode())
+                      return
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("X-Backend-Server", INSTANCE)
+                  self.end_headers()
+                  self.wfile.write(json.dumps(response_data, indent=2).encode())
+
+              def log_message(self, format, *args):
+                  print(f"[{datetime.now().isoformat()}] {INSTANCE} - {format % args}")
+
+          if __name__ == "__main__":
+              with socketserver.TCPServer(("127.0.0.1", PORT), AppHandler) as httpd:
+                  print(f"{INSTANCE} running on port {PORT}")
+                  httpd.serve_forever()
+
+    # Create systemd services
+    - name: Create app-1 systemd service
+      copy:
+        dest: /etc/systemd/system/app-1.service
+        content: |
+          [Unit]
+          Description=App Instance 1
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=www-data
+          Group=www-data
+          WorkingDirectory=/var/www/app1
+          ExecStart=/usr/bin/python3 /var/www/app1/app.py
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: reload systemd
+
+    - name: Create app-2 systemd service
+      copy:
+        dest: /etc/systemd/system/app-2.service
+        content: |
+          [Unit]
+          Description=App Instance 2
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=www-data
+          Group=www-data
+          WorkingDirectory=/var/www/app2
+          ExecStart=/usr/bin/python3 /var/www/app2/app.py
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: reload systemd
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Start app-1
+      service:
+        name: app-1
+        state: started
+        enabled: yes
+
+    - name: Start app-2
+      service:
+        name: app-2
+        state: started
+        enabled: yes
+
+    - name: Wait for apps to be ready
+      wait_for:
+        host: 127.0.0.1
+        port: "{{ item }}"
+        timeout: 30
+      loop:
+        - 8081
+        - 8082
+
+  roles:
+    - nginx-proxy
+
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes

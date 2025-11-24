@@ -1,0 +1,32 @@
+---
+# Default variables for mariadb-primary role
+# These can be overridden in playbooks or inventory
+
+# MariaDB version
+mariadb_version: "10.11"
+
+# Server ID for replication (must be unique)
+mariadb_server_id: 1
+
+# Replication user credentials
+mariadb_repl_user: repl
+mariadb_repl_password: replpass
+
+# Application user credentials
+mariadb_app_user: app_user
+mariadb_app_password: app_password
+
+# Database to create
+mariadb_database: voip_db
+
+# Performance tuning
+mariadb_max_connections: 500
+mariadb_innodb_buffer_pool_size: "1G"
+mariadb_innodb_log_file_size: "256M"
+mariadb_query_cache_size: "128M"
+
+# Network settings
+mariadb_bind_address: "0.0.0.0"
+
+# Read-only mode (for replicas)
+mariadb_read_only: 0  # 0 = writable (primary), 1 = read-only (replica)

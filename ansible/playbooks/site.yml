@@ -1,0 +1,41 @@
+---
+# Master playbook to configure all servers
+# Usage: ansible-playbook playbooks/site.yml
+
+- name: Configure all base systems
+  hosts: all
+  become: yes
+
+  roles:
+    - common
+
+- name: Configure MariaDB servers
+  hosts: mariadb
+  become: yes
+
+  tasks:
+    - name: Include MariaDB primary role
+      include_role:
+        name: mariadb-primary
+      when: inventory_hostname == 'maria-primary'
+
+    # TODO: Add mariadb-replica role
+    # - name: Include MariaDB replica role
+    #   include_role:
+    #     name: mariadb-replica
+    #   when: inventory_hostname == 'maria-replica'
+
+# TODO: Add more server groups
+# - name: Configure PostgreSQL servers
+#   hosts: postgres
+#   become: yes
+#   roles:
+#     - postgres-primary
+#     - postgres-replica
+
+# - name: Configure web servers
+#   hosts: webservers
+#   become: yes
+#   roles:
+#     - nginx
+#     - app-server

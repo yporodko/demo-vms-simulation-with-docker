@@ -1,0 +1,28 @@
+---
+# Asterisk VoIP Deployment - Docker Test Environment
+# Deploys Asterisk backend servers and load balancer to local Docker containers
+
+- name: Deploy Asterisk Backend Servers
+  hosts: asterisk
+  become: yes
+  roles:
+    - asterisk
+  tags: backends
+
+- name: Deploy Asterisk Load Balancer
+  hosts: asterisk_balancer
+  become: yes
+  vars:
+    # Override backend IPs for Docker network
+    asterisk_backends:
+      - name: "asterisk-1"
+        host: "172.20.0.40"
+        port: 5060
+        weight: 4  # 80%
+      - name: "asterisk-2"
+        host: "172.20.0.41"
+        port: 5060
+        weight: 1  # 20%
+  roles:
+    - asterisk-balancer
+  tags: balancer
